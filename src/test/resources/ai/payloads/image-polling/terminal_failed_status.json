@@ -1,0 +1,8 @@
+{
+  "requestId": "req_1234567890",
+  "status": "failed",
+  "error": {
+    "code": "provider_failure",
+    "message": "model overloaded"
+  }
+}

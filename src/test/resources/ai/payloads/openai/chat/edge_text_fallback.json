@@ -1,0 +1,11 @@
+{
+  "id": "cmpl-legacy-1",
+  "object": "text_completion",
+  "choices": [
+    {
+      "index": 0,
+      "text": "Legacy completion text fallback.",
+      "finish_reason": "stop"
+    }
+  ]
+}

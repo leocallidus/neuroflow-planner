@@ -1,5 +1,10 @@
 package com.example.neuroflowplanner;
 
+import com.example.neuroflowplanner.ai.AiConfigMigration;
+import com.example.neuroflowplanner.db.DatabaseMigrationRunner;
+import com.example.neuroflowplanner.service.ImageGenerationService;
+import com.example.neuroflowplanner.sync.SyncClientFacade;
+import com.example.neuroflowplanner.ui.AsyncErrorHandler;
 import com.example.neuroflowplanner.util.ConfigManager;
 import com.example.neuroflowplanner.ui.MainView;
 import com.example.neuroflowplanner.ui.SettingsDialog;
@@ -19,6 +24,14 @@ public class NeuroFlowApp extends Application {
 
     @Override
     public void start(Stage stage) {
+        AsyncErrorHandler.installGlobalExceptionHandlers();
+        // Migrate legacy configuration before anything else
+        AiConfigMigration.migrateIfNeeded();
+        // Run DB migrations before any DatabaseManager usage.
+        DatabaseMigrationRunner.migrate();
+        ImageGenerationService.getInstance().resumeAllPendingJobs();
+        SyncClientFacade.getInstance().initialize();
+        
         MainView mainView = new MainView();
         Scene scene = new Scene(mainView, 1678, 748);
         
@@ -44,7 +57,7 @@ public class NeuroFlowApp extends Application {
             }
         });
         
-        stage.setTitle("НейроФлоу Планировщик — ИИ-Планировщик задач");
+        stage.setTitle("НейроПоток Планировщик — ИИ-Планировщик задач");
         stage.setScene(scene);
         stage.setMinWidth(950);
         stage.setMinHeight(650);

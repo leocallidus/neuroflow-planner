@@ -1,6 +1,7 @@
 package com.example.neuroflowplanner.ui;
 
 import com.example.neuroflowplanner.model.Task;
+import com.example.neuroflowplanner.util.TaskScheduleFormatter;
 import com.example.neuroflowplanner.util.ConfigManager;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
@@ -73,8 +74,7 @@ public class ProjectProgressDialog implements InlineView {
 
         root = new ScrollPane(content);
         root.setFitToWidth(true);
-        // Адаптивные размеры для низких разрешений
-        root.setMinSize(350, 350);
+        InlineLayoutSupport.makeShrinkable(root, content);
         root.getStyleClass().add("projects-root");
         
         root.getStylesheets().add(getClass().getResource("/styles/app.css").toExternalForm());
@@ -159,7 +159,7 @@ public class ProjectProgressDialog implements InlineView {
                           daysLeft == 0 ? "Дедлайн сегодня" : "Осталось: " + daysLeft + " дн.";
         
         details.getChildren().addAll(
-            chip(project.getDeadline().toString(), MaterialDesignC.CALENDAR),
+            chip(TaskScheduleFormatter.formatDeadline(project), MaterialDesignC.CALENDAR),
             chip(daysText, MaterialDesignT.TIMER_SAND)
         );
 

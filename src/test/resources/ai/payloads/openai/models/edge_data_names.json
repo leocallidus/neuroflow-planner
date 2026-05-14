@@ -1,0 +1,15 @@
+{
+  "models": [
+    {
+      "name": "Provider: Model Alpha"
+    },
+    {
+      "name": "provider/model-beta"
+    }
+  ],
+  "data": [
+    {
+      "name": "provider/model-gamma"
+    }
+  ]
+}

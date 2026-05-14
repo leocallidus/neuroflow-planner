@@ -2,6 +2,7 @@ package com.example.neuroflowplanner.ui;
 
 import com.example.neuroflowplanner.db.DatabaseManager;
 import com.example.neuroflowplanner.model.Task;
+import com.example.neuroflowplanner.util.TaskScheduleFormatter;
 import com.example.neuroflowplanner.util.ConfigManager;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
@@ -39,6 +40,7 @@ public class KanbanDialog implements InlineView {
         this.tasks = tasks;
         
         root = new VBox(0);
+        root.setMinSize(0, 0);
         root.getStyleClass().add("kanban-root");
 
         // --- Header (компактный для низких разрешений) ---
@@ -61,6 +63,7 @@ public class KanbanDialog implements InlineView {
         board.setPadding(new Insets(12));
         board.setFillHeight(true);
         board.getStyleClass().add("kanban-board");
+        InlineLayoutSupport.makeShrinkable(board);
         
         board.getChildren().addAll(
             createColumn("К Выполнению", todoColumn, "kanban-header-todo"),
@@ -76,6 +79,7 @@ public class KanbanDialog implements InlineView {
         scrollPane.setFitToWidth(false);
         scrollPane.setHbarPolicy(ScrollPane.ScrollBarPolicy.AS_NEEDED);
         scrollPane.getStyleClass().add("kanban-scroll-pane");
+        InlineLayoutSupport.makeShrinkable(scrollPane);
         VBox.setVgrow(scrollPane, Priority.ALWAYS);
         
         root.getChildren().add(scrollPane);
@@ -117,6 +121,7 @@ public class KanbanDialog implements InlineView {
         column.setMinWidth(180);
         column.setMaxWidth(280);
         column.getStyleClass().add("kanban-column");
+        InlineLayoutSupport.makeShrinkable(column);
         // Убираем HGrow - колонки фиксированной ширины
 
         HBox header = new HBox(6);
@@ -131,11 +136,13 @@ public class KanbanDialog implements InlineView {
 
         content.setPadding(new Insets(8));
         content.setMinHeight(80);
+        InlineLayoutSupport.makeShrinkable(content);
 
         ScrollPane columnScroll = new ScrollPane(content);
         columnScroll.setFitToWidth(true);
         columnScroll.setHbarPolicy(ScrollPane.ScrollBarPolicy.NEVER);
         columnScroll.getStyleClass().add("kanban-column-scroll");
+        InlineLayoutSupport.makeShrinkable(columnScroll);
         VBox.setVgrow(columnScroll, Priority.ALWAYS);
 
         column.getChildren().addAll(header, columnScroll);
@@ -186,7 +193,7 @@ public class KanbanDialog implements InlineView {
         FontIcon calIcon = FontIcon.of(MaterialDesignC.CALENDAR, 10);
         calIcon.getStyleClass().add("kanban-meta-icon");
         
-        Label deadlineLabel = new Label(task.getDeadline().toString());
+        Label deadlineLabel = new Label(TaskScheduleFormatter.formatDeadline(task));
         deadlineLabel.getStyleClass().add("kanban-card-meta");
         
         javafx.scene.layout.Region spacer = new javafx.scene.layout.Region();

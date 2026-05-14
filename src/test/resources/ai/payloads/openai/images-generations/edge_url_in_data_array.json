@@ -1,0 +1,9 @@
+{
+  "created": 1700000000,
+  "data": [
+    {
+      "url": "https://cdn.example.test/generated/image-1.png",
+      "revised_prompt": "A blue circle"
+    }
+  ]
+}

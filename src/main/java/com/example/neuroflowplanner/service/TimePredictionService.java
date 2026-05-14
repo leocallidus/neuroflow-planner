@@ -1,32 +1,26 @@
 package com.example.neuroflowplanner.service;
 
+import com.example.neuroflowplanner.ai.AiClient;
+import com.example.neuroflowplanner.ai.AiClientFactory;
+import com.example.neuroflowplanner.ai.AiMode;
+import com.example.neuroflowplanner.ai.AiRequestOptions;
 import com.example.neuroflowplanner.model.Task;
-import com.example.neuroflowplanner.util.ConfigManager;
-import java.net.URI;
-import java.net.http.*;
 import java.util.concurrent.CompletableFuture;
 
 public class TimePredictionService {
 
-    private static final String DEFAULT_API_URL = "http://localhost:11434/api/chat";
-    private static final String DEFAULT_MODEL = "llama3";
-    private final HttpClient client = HttpClient.newHttpClient();
-
-    private String getApiUrl() {
-        String url = ConfigManager.getProperty("api.url");
-        return url != null ? url : DEFAULT_API_URL;
-    }
-
-    private String getModel() {
-        String model = ConfigManager.getProperty("api.model");
-        return model != null ? model : DEFAULT_MODEL;
-    }
-
-    private String getApiKey() {
-        return ConfigManager.getProperty("api.key");
+    public TimePredictionService() {
+        // AiClientFactory is used directly, no initialization needed
     }
 
     public CompletableFuture<String> predictTime(Task task) {
+        AiClient aiClient = AiClientFactory.getInstance().getActiveClient();
+        
+        // В офлайн-режиме возвращаем fallback
+        if (aiClient.getMode() == AiMode.OFFLINE) {
+            return CompletableFuture.completedFuture(fallback(task));
+        }
+        
         String prompt = """
             Оцени время выполнения задачи в часах/минутах.
             Название: %s
@@ -38,44 +32,24 @@ public class TimePredictionService {
                 task.getDescription().isEmpty() ? "нет" : task.getDescription(),
                 task.getComplexity());
 
-        String json = """
-            {"model":"%s","messages":[{"role":"user","content":"%s"}],"stream":false}
-            """.formatted(getModel(), escapeJson(prompt));
-
-        HttpRequest.Builder requestBuilder = HttpRequest.newBuilder()
-            .uri(URI.create(getApiUrl()))
-            .header("Content-Type", "application/json");
-        
-        String apiKey = getApiKey();
-        if (apiKey != null && !apiKey.isEmpty()) {
-            requestBuilder.header("Authorization", "Bearer " + apiKey);
-        }
-        
-        HttpRequest request = requestBuilder
-            .POST(HttpRequest.BodyPublishers.ofString(json))
+        AiRequestOptions options = AiRequestOptions.builder()
+            .model(aiClient.getDefaultModel())
+            .systemPrompt("Ты помощник по оценке времени выполнения задач. Отвечай кратко и конкретно.")
             .build();
 
-        return client.sendAsync(request, HttpResponse.BodyHandlers.ofString())
-            .thenApply(r -> r.statusCode() == 200 ? extractContent(r.body()) : fallback(task))
+        return aiClient.sendChatMessage(prompt, options)
+            .thenApply(response -> {
+                if (response.success() && response.content() != null) {
+                    return response.content();
+                }
+                return fallback(task);
+            })
             .exceptionally(e -> fallback(task));
     }
 
     private String fallback(Task task) {
         int mins = task.getComplexity() * 30;
         int h = mins / 60, m = mins % 60;
-        return "⏱ Оценка: " + (h > 0 ? h + " ч " : "") + m + " мин\n(на основе сложности " + task.getComplexity() + "/10)";
-    }
-
-    private String extractContent(String json) {
-        int idx = json.indexOf("\"content\":");
-        if (idx == -1) return "Ошибка";
-        int start = json.indexOf("\"", idx + 10) + 1;
-        int end = start;
-        while (end < json.length() && !(json.charAt(end) == '"' && json.charAt(end - 1) != '\\')) end++;
-        return json.substring(start, end).replace("\\n", "\n").replace("\\\"", "\"");
-    }
-
-    private String escapeJson(String t) {
-        return t.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n");
+        return "Оценка: " + (h > 0 ? h + " ч " : "") + m + " мин\n(на основе сложности " + task.getComplexity() + "/10)";
     }
 }

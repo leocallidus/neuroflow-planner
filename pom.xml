@@ -15,6 +15,16 @@
         <maven.compiler.target>21</maven.compiler.target>
         <javafx.version>21.0.6</javafx.version>
         <ikonli.version>12.3.1</ikonli.version>
+        <flyway.version>11.20.1</flyway.version>
+        <logback.version>1.5.18</logback.version>
+        <slf4j.version>2.0.17</slf4j.version>
+        <jackson.version>2.18.2</jackson.version>
+        <json.schema.validator.version>2.0.0</json.schema.validator.version>
+        <flyway.baselineOnMigrate>true</flyway.baselineOnMigrate>
+        <flyway.baselineVersion>1</flyway.baselineVersion>
+        <test.data.dir>${project.build.directory}/test-data/runtime</test.data.dir>
+        <test.db.path>${test.data.dir}/neuroflow.db</test.db.path>
+        <test.db.url>jdbc:sqlite:${test.db.path}</test.db.url>
     </properties>
 
     <dependencies>
@@ -47,6 +57,43 @@
             <groupId>org.xerial</groupId>
             <artifactId>sqlite-jdbc</artifactId>
             <version>3.45.1.0</version>
+            <exclusions>
+                <exclusion>
+                    <groupId>org.slf4j</groupId>
+                    <artifactId>slf4j-api</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+
+        <!-- Flyway DB Migrations -->
+        <dependency>
+            <groupId>org.flywaydb</groupId>
+            <artifactId>flyway-core</artifactId>
+            <version>${flyway.version}</version>
+        </dependency>
+
+        <!-- JSON parsing and schema validation for AI payloads -->
+        <dependency>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-databind</artifactId>
+            <version>${jackson.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>com.networknt</groupId>
+            <artifactId>json-schema-validator</artifactId>
+            <version>${json.schema.validator.version}</version>
+        </dependency>
+
+        <!-- Logging backend for SLF4J -->
+        <dependency>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-api</artifactId>
+            <version>${slf4j.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>ch.qos.logback</groupId>
+            <artifactId>logback-classic</artifactId>
+            <version>${logback.version}</version>
         </dependency>
 
         <!-- Ikonli Core + JavaFX + MaterialDesign2 -->
@@ -123,6 +170,18 @@
             <version>2.2</version>
             <scope>test</scope>
         </dependency>
+        <dependency>
+            <groupId>com.tngtech.archunit</groupId>
+            <artifactId>archunit-junit5</artifactId>
+            <version>1.4.1</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.mockito</groupId>
+            <artifactId>mockito-core</artifactId>
+            <version>5.11.0</version>
+            <scope>test</scope>
+        </dependency>
     </dependencies>
 
     <build>
@@ -141,6 +200,13 @@
                 <artifactId>maven-surefire-plugin</artifactId>
                 <version>3.2.3</version>
                 <configuration>
+                    <argLine>--add-opens com.example.neuroflowplanner/com.example.neuroflowplanner.testinfra=ALL-UNNAMED --add-opens javafx.graphics/com.sun.javafx.application=ALL-UNNAMED</argLine>
+                    <systemPropertyVariables>
+                        <neuroflow.data.dir>${test.data.dir}</neuroflow.data.dir>
+                        <neuroflow.db.path>${test.db.path}</neuroflow.db.path>
+                        <neuroflow.db.url>${test.db.url}</neuroflow.db.url>
+                        <neuroflow.test.disableOsSecretProviders>true</neuroflow.test.disableOsSecretProviders>
+                    </systemPropertyVariables>
                     <includes>
                         <include>**/*Test.java</include>
                     </includes>
@@ -159,10 +225,37 @@
                     </execution>
                 </executions>
                 <configuration>
+                    <argLine>--add-opens com.example.neuroflowplanner/com.example.neuroflowplanner.testinfra=ALL-UNNAMED --add-opens javafx.graphics/com.sun.javafx.application=ALL-UNNAMED</argLine>
+                    <systemPropertyVariables>
+                        <neuroflow.data.dir>${test.data.dir}</neuroflow.data.dir>
+                        <neuroflow.db.path>${test.db.path}</neuroflow.db.path>
+                        <neuroflow.db.url>${test.db.url}</neuroflow.db.url>
+                        <neuroflow.test.disableOsSecretProviders>true</neuroflow.test.disableOsSecretProviders>
+                    </systemPropertyVariables>
                     <includes>
                         <include>**/*IT.java</include>
                     </includes>
                 </configuration>
+            </plugin>
+            <plugin>
+                <groupId>org.flywaydb</groupId>
+                <artifactId>flyway-maven-plugin</artifactId>
+                <version>${flyway.version}</version>
+                <configuration>
+                    <url>jdbc:sqlite:${project.basedir}/neuroflow_data/neuroflow.db</url>
+                    <locations>
+                        <location>classpath:db/migration</location>
+                    </locations>
+                    <baselineOnMigrate>${flyway.baselineOnMigrate}</baselineOnMigrate>
+                    <baselineVersion>${flyway.baselineVersion}</baselineVersion>
+                </configuration>
+                <dependencies>
+                    <dependency>
+                        <groupId>org.xerial</groupId>
+                        <artifactId>sqlite-jdbc</artifactId>
+                        <version>3.45.1.0</version>
+                    </dependency>
+                </dependencies>
             </plugin>
             <plugin>
                 <groupId>org.openjfx</groupId>

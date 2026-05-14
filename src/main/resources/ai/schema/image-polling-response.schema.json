@@ -1,0 +1,99 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://neuroflowplanner.local/schema/ai/image-polling-response.schema.json",
+  "type": "object",
+  "additionalProperties": true,
+  "properties": {
+    "id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "requestId": {
+      "type": "string",
+      "minLength": 1
+    },
+    "status": {
+      "type": "string",
+      "minLength": 1
+    },
+    "state": {
+      "type": "string",
+      "minLength": 1
+    },
+    "resultUrl": {
+      "type": "string",
+      "pattern": "^https?://"
+    },
+    "imageUrl": {
+      "type": "string",
+      "pattern": "^https?://"
+    },
+    "outputUrl": {
+      "type": "string",
+      "pattern": "^https?://"
+    },
+    "url": {
+      "type": "string",
+      "pattern": "^https?://"
+    },
+    "data": {
+      "oneOf": [
+        {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": true,
+            "properties": {
+              "url": {
+                "type": "string",
+                "pattern": "^https?://"
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "url": {
+              "type": "string",
+              "pattern": "^https?://"
+            }
+          }
+        }
+      ]
+    }
+  },
+  "anyOf": [
+    {
+      "required": [
+        "status"
+      ]
+    },
+    {
+      "required": [
+        "state"
+      ]
+    },
+    {
+      "required": [
+        "resultUrl"
+      ]
+    },
+    {
+      "required": [
+        "imageUrl"
+      ]
+    },
+    {
+      "required": [
+        "outputUrl"
+      ]
+    },
+    {
+      "required": [
+        "url"
+      ]
+    }
+  ]
+}

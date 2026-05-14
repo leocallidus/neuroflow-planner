@@ -1,0 +1,14 @@
+{
+  "models": [
+    {
+      "name": "llama3:latest"
+    },
+    {
+      "name": "llama3"
+    },
+    {
+      "name": "deepseek-r1:latest"
+    }
+  ],
+  "other": "ignored"
+}

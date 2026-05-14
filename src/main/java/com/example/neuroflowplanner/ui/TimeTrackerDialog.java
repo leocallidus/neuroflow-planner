@@ -20,6 +20,7 @@ import org.kordamp.ikonli.materialdesign2.MaterialDesignP;
 import org.kordamp.ikonli.materialdesign2.MaterialDesignS;
 import org.kordamp.ikonli.materialdesign2.MaterialDesignT;
 
+import java.time.LocalDateTime;
 import java.util.List;
 
 /**
@@ -30,6 +31,7 @@ public class TimeTrackerDialog implements InlineView {
     private Task selectedTask;
     private Timeline timer;
     private int sessionSeconds = 0;
+    private LocalDateTime sessionStart;
     private final Label timerLabel = new Label("00:00:00");
     private final Label trackedLabel = new Label("Всего: 0ч 0мин");
     private final Button startBtn = new Button();
@@ -42,7 +44,8 @@ public class TimeTrackerDialog implements InlineView {
     private final boolean isDark = ConfigManager.isDarkTheme();
 
     private TimeTrackerDialog(List<Task> tasks) {
-        root = new VBox(20);
+        root = new VBox(0);
+        root.setMinSize(0, 0);
         root.setAlignment(Pos.TOP_CENTER);
         root.setPadding(new Insets(30));
         root.getStyleClass().add("tracker-root");
@@ -154,8 +157,10 @@ public class TimeTrackerDialog implements InlineView {
         addBtn.getStyleClass().add("tracker-btn-secondary");
         addBtn.setOnAction(e -> {
             if (selectedTask != null) {
-                selectedTask.addTrackedMinutes(manualMins.getValue());
+                int mins = manualMins.getValue();
+                selectedTask.addTrackedMinutes(mins);
                 db.saveTask(selectedTask);
+                db.saveTimeSession(selectedTask.getId(), LocalDateTime.now().minusMinutes(mins), mins);
                 updateTrackedDisplay();
             } else {
                 warnNoTask();
@@ -165,13 +170,16 @@ public class TimeTrackerDialog implements InlineView {
         manualInputBox.getChildren().addAll(manualMins, new Label("мин"), addBtn);
         manualBox.getChildren().addAll(manualLabel, manualInputBox);
 
-        root.getChildren().addAll(
-            header, 
-            selectionBox,
-            timerBox,
-            controls,
-            manualBox
-        );
+        VBox body = new VBox(20);
+        body.setAlignment(Pos.TOP_CENTER);
+        body.getChildren().addAll(selectionBox, timerBox, controls, manualBox);
+
+        ScrollPane bodyScroll = InlineLayoutSupport.createContentScroll(body, "tracker-body-scroll");
+        bodyScroll.setMaxWidth(Double.MAX_VALUE);
+        VBox.setVgrow(bodyScroll, Priority.ALWAYS);
+
+        root.getChildren().addAll(header, bodyScroll);
+        InlineLayoutSupport.makeShrinkable(root, body);
 
         root.getStylesheets().add(getClass().getResource("/styles/app.css").toExternalForm());
         if (isDark) {
@@ -211,6 +219,9 @@ public class TimeTrackerDialog implements InlineView {
             return;
         }
         if (timer == null) {
+            if (sessionSeconds == 0 || sessionStart == null) {
+                sessionStart = LocalDateTime.now();
+            }
             timer = new Timeline(new KeyFrame(Duration.seconds(1), e -> tick()));
             timer.setCycleCount(Timeline.INDEFINITE);
             timer.play();
@@ -244,9 +255,12 @@ public class TimeTrackerDialog implements InlineView {
             long mins = Math.max(sessionSeconds / 60, 1);
             selectedTask.addTrackedMinutes(mins);
             db.saveTask(selectedTask);
+            LocalDateTime startedAt = sessionStart != null ? sessionStart : LocalDateTime.now().minusMinutes(mins);
+            db.saveTimeSession(selectedTask.getId(), startedAt, mins);
             updateTrackedDisplay();
         }
         sessionSeconds = 0;
+        sessionStart = null;
         timerLabel.setText("00:00:00");
     }
 

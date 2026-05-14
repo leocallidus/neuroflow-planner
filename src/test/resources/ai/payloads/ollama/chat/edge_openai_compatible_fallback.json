@@ -1,0 +1,10 @@
+{
+  "model": "proxy/llama3",
+  "choices": [
+    {
+      "message": {
+        "content": "OpenAI-compatible fallback from gateway."
+      }
+    }
+  ]
+}

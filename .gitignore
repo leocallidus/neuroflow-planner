@@ -1,4 +1,6 @@
 target/
+out/
+dependency-reduced-pom.xml
 !.mvn/wrapper/maven-wrapper.jar
 !**/src/main/**/target/
 !**/src/test/**/target/
@@ -38,5 +40,19 @@ build/
 ### Mac OS ###
 .DS_Store
 
+### Runtime data and logs ###
+neuroflow_data/
+logs/
+*.log
+
 ### Config ###
 config.properties
+backend/.env
+backend/.venv/
+**/.venv/
+**/.pytest_cache/
+**/.ruff_cache/
+**/__pycache__/
+*.py[cod]
+backend/*.egg-info/
+tests/Test Results - *.html

@@ -3,7 +3,9 @@ package com.example.neuroflowplanner.ui;
 import com.example.neuroflowplanner.NeuroFlowApp;
 import com.example.neuroflowplanner.db.DatabaseManager;
 import com.example.neuroflowplanner.model.Task;
+import com.example.neuroflowplanner.testinfra.IsolatedTestData;
 import com.example.neuroflowplanner.util.ConfigManager;
+import com.example.neuroflowplanner.util.DataPathManager;
 import javafx.application.Platform;
 import javafx.scene.Node;
 import javafx.scene.control.*;
@@ -16,6 +18,7 @@ import org.testfx.api.FxToolkit;
 import org.testfx.framework.junit5.ApplicationTest;
 import org.testfx.util.WaitForAsyncUtils;
 
+import java.nio.file.Path;
 import java.time.LocalDate;
 import java.util.Set;
 import java.util.UUID;
@@ -30,10 +33,12 @@ import static org.junit.jupiter.api.Assertions.*;
 @DisplayName("NeuroFlow Planner Integration Tests")
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
 @DisabledIfEnvironmentVariable(named = "CI", matches = "true", disabledReason = "UI tests require display")
+@IsolatedTestData
 class NeuroFlowAppIT extends ApplicationTest {
 
     private static Stage primaryStage;
     private static final String TEST_TASK_PREFIX = "IT-Test-";
+    private static final String ISOLATED_DIR_PREFIX = "neuroflow-test-data-";
 
     @Override
     public void start(Stage stage) throws Exception {
@@ -44,6 +49,7 @@ class NeuroFlowAppIT extends ApplicationTest {
 
     @BeforeAll
     static void setupHeadless() {
+        assertIsolatedDataDir();
         if (System.getenv("DISPLAY") == null && System.getProperty("os.name").toLowerCase().contains("linux")) {
             System.setProperty("testfx.robot", "glass");
             System.setProperty("testfx.headless", "true");
@@ -55,6 +61,7 @@ class NeuroFlowAppIT extends ApplicationTest {
 
     @AfterAll
     static void cleanup() throws TimeoutException {
+        assertIsolatedDataDir();
         Platform.runLater(() -> {
             DatabaseManager db = DatabaseManager.getInstance();
             db.loadAllTasks().stream()
@@ -104,8 +111,7 @@ class NeuroFlowAppIT extends ApplicationTest {
             .orElse(null);
         
         if (titleField != null) {
-            clickOn(titleField);
-            write(taskTitle);
+            Platform.runLater(() -> titleField.setText(taskTitle));
             WaitForAsyncUtils.waitForFxEvents();
         }
 
@@ -393,5 +399,14 @@ class NeuroFlowAppIT extends ApplicationTest {
         } catch (Exception e) {
             return null;
         }
+    }
+
+    private static void assertIsolatedDataDir() {
+        Path dataDir = DataPathManager.getDataDirectory().toAbsolutePath().normalize();
+        Path fileName = dataDir.getFileName();
+        assertTrue(
+            fileName != null && fileName.toString().startsWith(ISOLATED_DIR_PREFIX),
+            "Cleanup allowed only in isolated test data dir, actual: " + dataDir
+        );
     }
 }

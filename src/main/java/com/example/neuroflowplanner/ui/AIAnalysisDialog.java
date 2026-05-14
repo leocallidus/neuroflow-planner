@@ -1,10 +1,11 @@
 package com.example.neuroflowplanner.ui;
 
-import com.example.neuroflowplanner.db.DatabaseManager;
 import com.example.neuroflowplanner.model.MoodEntry;
 import com.example.neuroflowplanner.model.Task;
+import com.example.neuroflowplanner.db.DatabaseManager;
 import com.example.neuroflowplanner.service.AIAnalysisCentralService;
 import com.example.neuroflowplanner.service.MoodAnalysisService;
+import com.example.neuroflowplanner.util.AsyncContext;
 import com.example.neuroflowplanner.util.ConfigManager;
 import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
@@ -21,12 +22,12 @@ import javafx.scene.shape.Shape;
 import org.kordamp.ikonli.javafx.FontIcon;
 import org.kordamp.ikonli.materialdesign2.*;
 
+import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.Collections;
 import java.util.List;
-import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
 
 /**
@@ -38,8 +39,8 @@ public class AIAnalysisDialog implements InlineView {
     private final BorderPane root;
     private final List<Task> tasks;
     private final AIAnalysisCentralService aiService;
+    private final DatabaseManager db = DatabaseManager.getInstance();
     private final MoodAnalysisService moodService;
-    private final DatabaseManager db;
     private Runnable closeAction;
     private final boolean isDark = ConfigManager.isDarkTheme();
 
@@ -47,10 +48,8 @@ public class AIAnalysisDialog implements InlineView {
             this.tasks = tasks;
             this.aiService = new AIAnalysisCentralService();
             this.moodService = new MoodAnalysisService();
-            this.db = DatabaseManager.getInstance();
             this.root = new BorderPane();
-            // Адаптивные размеры для низких разрешений
-            this.root.setMinSize(500, 400);
+            this.root.setMinSize(0, 0);
             this.root.getStyleClass().add("ai-dialog-root");
     
             // Refresh priorities upfront so charts and матрица use актуальные значения
@@ -63,6 +62,7 @@ public class AIAnalysisDialog implements InlineView {
             TabPane tabPane = new TabPane();
             tabPane.setTabClosingPolicy(TabPane.TabClosingPolicy.UNAVAILABLE);
             tabPane.getStyleClass().add("ai-tab-pane");
+            InlineLayoutSupport.makeShrinkable(tabPane);
     
             Tab overviewTab = new Tab("Обзор", createOverviewContent());
             overviewTab.setGraphic(FontIcon.of(MaterialDesignV.VIEW_DASHBOARD, 16));
@@ -98,6 +98,7 @@ public class AIAnalysisDialog implements InlineView {
             ScrollPane scroll = new ScrollPane();
             scroll.setFitToWidth(true);
             scroll.setStyle("-fx-background-color: transparent; -fx-background: transparent;");
+            InlineLayoutSupport.makeShrinkable(scroll);
             
             FlowPane container = new FlowPane();
             container.setPadding(new Insets(25));
@@ -421,15 +422,15 @@ public class AIAnalysisDialog implements InlineView {
         BorderPane.setMargin(chartCard, new Insets(0, 0, 0, 25));
         
         refreshChart.run();
-        
-        return content;
+
+        return InlineLayoutSupport.createContentScroll(content, "ai-inline-scroll");
     }
 
     private Node createPredictionsContent() {
         ScrollPane scroll = new ScrollPane();
         scroll.setFitToWidth(true);
-        scroll.setFitToHeight(true);
         scroll.setStyle("-fx-background-color: transparent; -fx-background: transparent;");
+        InlineLayoutSupport.makeShrinkable(scroll);
         
         VBox content = new VBox(25);
         content.setPadding(new Insets(25));
@@ -580,7 +581,7 @@ public class AIAnalysisDialog implements InlineView {
         
         refreshBtn.setOnAction(e -> {
             aiResultArea.setText("⏳ Анализирую данные...");
-            CompletableFuture.supplyAsync(() -> generateAIPredictions())
+            AsyncContext.supplyAsync(() -> generateAIPredictions())
                 .thenAccept(result -> javafx.application.Platform.runLater(() -> aiResultArea.setText(result)));
         });
         
@@ -639,7 +640,7 @@ public class AIAnalysisDialog implements InlineView {
         dateBox.setAlignment(Pos.CENTER);
         dateBox.setMinWidth(60);
         
-        String dayName = isToday ? "Сегодня" : date.getDayOfWeek().toString().substring(0, 2);
+        String dayName = isToday ? "Сегодня" : getDayAbbrev(date.getDayOfWeek());
         Label dayLabel = new Label(dayName);
         dayLabel.setStyle("-fx-font-size: 11px; -fx-text-fill: " + (isToday ? (isDark ? "#89b4fa" : "#1e66f5") : (isDark ? "#a6adc8" : "#6c6f85")) + "; -fx-font-weight: bold;");
         
@@ -687,6 +688,18 @@ public class AIAnalysisDialog implements InlineView {
         
         row.getChildren().addAll(dateBox, separator, tasksBox, countBadge);
         return row;
+    }
+
+    private String getDayAbbrev(DayOfWeek day) {
+        return switch (day) {
+            case MONDAY -> "ПН";
+            case TUESDAY -> "ВТ";
+            case WEDNESDAY -> "СР";
+            case THURSDAY -> "ЧТ";
+            case FRIDAY -> "ПТ";
+            case SATURDAY -> "СБ";
+            case SUNDAY -> "ВС";
+        };
     }
     
     private String generateAIPredictions() {
@@ -829,7 +842,7 @@ public class AIAnalysisDialog implements InlineView {
             aiSplitBtn.setDisable(true);
             String loadingText = "⏳ Генерация подзадач...";
             subtasksArea.setText(loadingText);
-            CompletableFuture.supplyAsync(() -> generateAiSubtasks(task))
+            AsyncContext.supplyAsync(() -> generateAiSubtasks(task))
                 .exceptionally(ex -> List.of("Подзадача 1: " + task.getTitle(),
                                              "Подзадача 2: уточнить требования",
                                              "Подзадача 3: проверить результат"))
@@ -877,7 +890,7 @@ public class AIAnalysisDialog implements InlineView {
         aiTuneBtn.setOnAction(e -> {
             aiTuneBtn.setDisable(true);
             aiTuneBtn.setText("⏳ Подбираем значения...");
-            CompletableFuture.supplyAsync(() -> generateAiSplitEstimate(task))
+            AsyncContext.supplyAsync(() -> generateAiSplitEstimate(task))
                 .exceptionally(ex -> new SplitEstimate(Math.max(1, task.getComplexity() / 2), task.getSmartPriority() > 0 ? task.getSmartPriority() : 5))
                 .thenAccept(estimate -> javafx.application.Platform.runLater(() -> {
                     complexitySlider.setValue(estimate.complexity());
@@ -922,6 +935,7 @@ public class AIAnalysisDialog implements InlineView {
                     if (!trimmed.isEmpty()) {
                         Task subtask = new Task(trimmed, "", task.getDeadline(), (int) Math.round(complexitySlider.getValue()));
                         subtask.setParentId(task.getId());
+                        subtask.setDeadlineTime(task.getDeadlineTime());
                         subtask.setSmartPriority(Math.round(prioritySlider.getValue() * 10.0) / 10.0);
                         task.getSubtasks().add(subtask);
                         db.saveTask(subtask);
@@ -1201,7 +1215,12 @@ public class AIAnalysisDialog implements InlineView {
         taskCombo.getSelectionModel().selectedItemProperty().addListener((obs, oldVal, newVal) -> {
             analyzeBtn.setDisable(newVal == null);
             if (newVal != null) {
-                smartReport.setText("Нажмите 'Запустить анализ'...");
+                String savedInsight = newVal.getAiInsight();
+                if (savedInsight != null && !savedInsight.isBlank()) {
+                    smartReport.setText(savedInsight);
+                } else {
+                    smartReport.setText("Нажмите 'Запустить анализ'...");
+                }
                 timeResult.setText("-");
             }
         });
@@ -1213,8 +1232,12 @@ public class AIAnalysisDialog implements InlineView {
             smartReport.setText("⏳ Анализирую...");
             timeResult.setText("⏳");
             
-            aiService.analyzeSmartCriteria(t).thenAccept(report -> 
-                javafx.application.Platform.runLater(() -> smartReport.setText(report))
+            aiService.analyzeSmartCriteria(t).thenAccept(report ->
+                javafx.application.Platform.runLater(() -> {
+                    smartReport.setText(report);
+                    t.setAiInsight(report);
+                    db.saveTask(t);
+                })
             );
             
             aiService.predictTaskTime(t).thenAccept(prediction -> 
@@ -1228,8 +1251,8 @@ public class AIAnalysisDialog implements InlineView {
         content.setLeft(leftPane);
         content.setCenter(rightPane);
         BorderPane.setMargin(rightPane, new Insets(0, 0, 0, 25));
-        
-        return content;
+
+        return InlineLayoutSupport.createContentScroll(content, "ai-inline-scroll");
     }
 
     private void styleScatterPoints(XYChart.Series<Number, Number> series,
@@ -1398,8 +1421,8 @@ public class AIAnalysisDialog implements InlineView {
     private Node createOverviewContent() {
         ScrollPane scroll = new ScrollPane();
         scroll.setFitToWidth(true);
-        scroll.setFitToHeight(true);
         scroll.setStyle("-fx-background-color: transparent; -fx-background: transparent;");
+        InlineLayoutSupport.makeShrinkable(scroll);
         
         VBox content = new VBox(25);
         content.setPadding(new Insets(25));

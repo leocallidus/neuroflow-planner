@@ -1,0 +1,12 @@
+{
+  "id": "chatcmpl-err-1",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant"
+      },
+      "finish_reason": "stop"
+    }
+  ]
+}

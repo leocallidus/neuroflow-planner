@@ -116,8 +116,7 @@ public class StatisticsDialog implements InlineView {
         Label statusTitle = new Label("Прогресс выполнения");
         statusTitle.getStyleClass().add("stats-section-title");
         
-        HBox statusContent = new HBox(20);
-        statusContent.setAlignment(Pos.CENTER_LEFT);
+        VBox statusContent = new VBox(20); // Changed to VBox for vertical stacking
         
         double progress = total == 0 ? 0 : (double) completed / total;
         double onTimeRate = completed == 0 ? 0 : (double) completedOnTime / completed;
@@ -125,7 +124,7 @@ public class StatisticsDialog implements InlineView {
         // Прогресс выполнения
         VBox progressBox = new VBox(8);
         ProgressBar pBar = new ProgressBar(progress);
-        pBar.setPrefWidth(200);
+        pBar.setMaxWidth(Double.MAX_VALUE); // Responsive width
         pBar.getStyleClass().add("stats-progress-bar-large");
         
         Label progressLbl = new Label(String.format("%.0f%%", progress * 100));
@@ -139,13 +138,14 @@ public class StatisticsDialog implements InlineView {
         
         HBox progressRow = new HBox(15);
         progressRow.setAlignment(Pos.CENTER_LEFT);
+        HBox.setHgrow(pBar, Priority.ALWAYS); // Allow bar to grow
         progressRow.getChildren().addAll(pBar, textInfo);
         progressBox.getChildren().add(progressRow);
         
         // Процент выполнения в срок
         VBox onTimeBox = new VBox(8);
         ProgressBar onTimeBar = new ProgressBar(onTimeRate);
-        onTimeBar.setPrefWidth(200);
+        onTimeBar.setMaxWidth(Double.MAX_VALUE); // Responsive width
         onTimeBar.getStyleClass().add("stats-progress-bar-ontime");
         
         Label onTimeLbl = new Label(String.format("%.0f%%", onTimeRate * 100));
@@ -159,6 +159,7 @@ public class StatisticsDialog implements InlineView {
         
         HBox onTimeRow = new HBox(15);
         onTimeRow.setAlignment(Pos.CENTER_LEFT);
+        HBox.setHgrow(onTimeBar, Priority.ALWAYS); // Allow bar to grow
         onTimeRow.getChildren().addAll(onTimeBar, onTimeInfo);
         onTimeBox.getChildren().add(onTimeRow);
 
@@ -169,9 +170,7 @@ public class StatisticsDialog implements InlineView {
 
         root = new ScrollPane(content);
         root.setFitToWidth(true);
-        root.setFitToHeight(true);
-        // Адаптивные размеры для низких разрешений
-        root.setMinSize(400, 350);
+        InlineLayoutSupport.makeShrinkable(root, content);
         root.getStyleClass().add("stats-root");
         
         root.getStylesheets().add(getClass().getResource("/styles/app.css").toExternalForm());

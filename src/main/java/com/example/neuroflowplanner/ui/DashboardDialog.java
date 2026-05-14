@@ -1,6 +1,7 @@
 package com.example.neuroflowplanner.ui;
 
 import com.example.neuroflowplanner.model.Task;
+import com.example.neuroflowplanner.util.TaskScheduleFormatter;
 import com.example.neuroflowplanner.util.ConfigManager;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
@@ -131,9 +132,7 @@ public class DashboardDialog implements InlineView {
 
         root = new ScrollPane(content);
         root.setFitToWidth(true);
-        root.setFitToHeight(true);
-        // Убраны фиксированные размеры для адаптивности на низких разрешениях
-        root.setMinSize(300, 200);
+        InlineLayoutSupport.makeShrinkable(root, content);
         root.getStyleClass().add("dashboard-root");
         
         root.getStylesheets().add(getClass().getResource("/styles/app.css").toExternalForm());
@@ -246,7 +245,7 @@ public class DashboardDialog implements InlineView {
         Label title = new Label(task.getTitle());
         title.getStyleClass().add("timeline-title");
         
-        Label date = new Label(task.getDeadline().toString());
+        Label date = new Label(TaskScheduleFormatter.formatDeadline(task));
         date.getStyleClass().add("timeline-date");
         info.getChildren().addAll(title, date);
 

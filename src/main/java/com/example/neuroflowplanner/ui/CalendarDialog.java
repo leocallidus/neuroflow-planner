@@ -38,6 +38,7 @@ public class CalendarDialog implements InlineView {
         this.currentMonth = YearMonth.now();
 
         root = new VBox(0);
+        root.setMinSize(0, 0);
         root.getStyleClass().add("calendar-root");
 
         // --- Header ---
@@ -103,8 +104,8 @@ public class CalendarDialog implements InlineView {
 
         scrollPane = new ScrollPane(calendarGrid);
         scrollPane.setFitToWidth(true);
-        scrollPane.setFitToHeight(true);
         scrollPane.getStyleClass().add("calendar-scroll-pane");
+        InlineLayoutSupport.makeShrinkable(scrollPane, calendarGrid);
         VBox.setVgrow(scrollPane, Priority.ALWAYS);
         
         root.getChildren().add(scrollPane);
@@ -214,6 +215,7 @@ public class CalendarDialog implements InlineView {
         }
 
         cell.getChildren().add(tasksBox);
+        InlineLayoutSupport.makeShrinkable(tasksBox);
         VBox.setVgrow(tasksBox, Priority.ALWAYS);
         return cell;
     }

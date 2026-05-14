@@ -1,8 +1,11 @@
 package com.example.neuroflowplanner.service;
 
+import com.example.neuroflowplanner.db.DatabaseManager;
 import com.example.neuroflowplanner.model.Task;
+import com.example.neuroflowplanner.model.TimeSession;
 import java.time.DayOfWeek;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
 import java.util.*;
 import java.util.stream.Collectors;
@@ -11,6 +14,9 @@ public class PersonalInsightsService {
 
     public record Insight(String icon, String title, String description, InsightType type) {}
     public enum InsightType { POSITIVE, WARNING, INFO, TIP }
+    public record RhythmSummary(String bestDay, String bestTime, List<String> tips) {}
+
+    private final DatabaseManager db = DatabaseManager.getInstance();
 
     public record Stats(
         int totalTasks, int archivedTasks, long totalMinutes,
@@ -128,5 +134,126 @@ public class PersonalInsightsService {
         }
 
         return insights;
+    }
+
+    public RhythmSummary analyzeRhythm(List<Task> tasks) {
+        List<TimeSession> sessions = db.loadTimeSessions();
+        Map<DayOfWeek, Long> minutesByDay = new EnumMap<>(DayOfWeek.class);
+        Map<Integer, Long> minutesByHour = new HashMap<>();
+        long totalTrackedMinutes = 0;
+
+        for (TimeSession session : sessions) {
+            long minutes = Math.max(session.getMinutes(), 0);
+            totalTrackedMinutes += minutes;
+            LocalDateTime startedAt = session.getStartedAt();
+            if (startedAt == null) {
+                continue;
+            }
+            minutesByDay.merge(startedAt.getDayOfWeek(), minutes, Long::sum);
+            minutesByHour.merge(startedAt.getHour(), minutes, Long::sum);
+        }
+
+        boolean hasDayData = !minutesByDay.isEmpty();
+        boolean hasTimeData = !minutesByHour.isEmpty();
+
+        Map<DayOfWeek, Long> fallbackDayCounts = new EnumMap<>(DayOfWeek.class);
+        if (!hasDayData) {
+            for (Task task : flattenTasks(tasks)) {
+                LocalDate date = task.getCompletedDate();
+                if (date == null && task.isArchived()) {
+                    date = task.getDeadline();
+                }
+                if (date != null) {
+                    fallbackDayCounts.merge(date.getDayOfWeek(), 1L, Long::sum);
+                }
+            }
+            hasDayData = !fallbackDayCounts.isEmpty();
+        }
+
+        DayOfWeek bestDay = null;
+        long bestDayValue = 0;
+        if (!minutesByDay.isEmpty()) {
+            Map.Entry<DayOfWeek, Long> best = minutesByDay.entrySet().stream()
+                .max(Map.Entry.comparingByValue()).orElse(null);
+            if (best != null) {
+                bestDay = best.getKey();
+                bestDayValue = best.getValue();
+            }
+        } else if (!fallbackDayCounts.isEmpty()) {
+            Map.Entry<DayOfWeek, Long> best = fallbackDayCounts.entrySet().stream()
+                .max(Map.Entry.comparingByValue()).orElse(null);
+            if (best != null) {
+                bestDay = best.getKey();
+                bestDayValue = best.getValue();
+            }
+        }
+
+        String bestDayLabel = hasDayData && bestDay != null ? dayToRu(bestDay) : "Недостаточно данных";
+        String bestTimeLabel = hasTimeData ? formatBestTime(minutesByHour) : "Недостаточно данных";
+
+        List<String> tips = new ArrayList<>();
+        if (totalTrackedMinutes == 0) {
+            tips.add("Включите трекинг времени, чтобы точнее определить пики продуктивности.");
+        }
+        if (hasDayData && bestDay != null) {
+            tips.add("Планируйте важные задачи на " + dayToRu(bestDay) + ".");
+        }
+        if (hasTimeData && !bestTimeLabel.equals("Недостаточно данных")) {
+            tips.add("Сложные задачи лучше ставить на окно " + bestTimeLabel + ".");
+        }
+        if (totalTrackedMinutes > 0 && bestDayValue > 0) {
+            double share = bestDayValue / (double) totalTrackedMinutes;
+            if (share >= 0.45) {
+                tips.add("Нагрузка сильно сосредоточена в один день — добавьте буфер и отдых.");
+            } else if (share <= 0.25) {
+                tips.add("Ритм распределен равномерно — поддерживайте этот баланс.");
+            }
+        }
+        if (tips.isEmpty()) {
+            tips.add("Продолжайте фиксировать прогресс — ритм станет точнее.");
+        }
+
+        return new RhythmSummary(bestDayLabel, bestTimeLabel, tips);
+    }
+
+    private String formatBestTime(Map<Integer, Long> minutesByHour) {
+        long bestMinutes = -1;
+        int bestStart = 0;
+        for (int hour = 0; hour < 24; hour++) {
+            long minutes = minutesByHour.getOrDefault(hour, 0L) + minutesByHour.getOrDefault((hour + 1) % 24, 0L);
+            if (minutes > bestMinutes) {
+                bestMinutes = minutes;
+                bestStart = hour;
+            }
+        }
+        int end = (bestStart + 2) % 24;
+        return String.format("%02d:00–%02d:00", bestStart, end);
+    }
+
+    private String dayToRu(DayOfWeek day) {
+        return switch (day) {
+            case MONDAY -> "Понедельник";
+            case TUESDAY -> "Вторник";
+            case WEDNESDAY -> "Среда";
+            case THURSDAY -> "Четверг";
+            case FRIDAY -> "Пятница";
+            case SATURDAY -> "Суббота";
+            case SUNDAY -> "Воскресенье";
+        };
+    }
+
+    private List<Task> flattenTasks(List<Task> tasks) {
+        List<Task> all = new ArrayList<>();
+        Deque<Task> stack = new ArrayDeque<>(tasks);
+        while (!stack.isEmpty()) {
+            Task task = stack.pop();
+            all.add(task);
+            if (task.hasSubtasks()) {
+                for (Task sub : task.getSubtasks()) {
+                    stack.push(sub);
+                }
+            }
+        }
+        return all;
     }
 }

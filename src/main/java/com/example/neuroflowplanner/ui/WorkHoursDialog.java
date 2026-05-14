@@ -7,6 +7,7 @@ import javafx.scene.Node;
 import javafx.scene.control.Button;
 import javafx.scene.control.CheckBox;
 import javafx.scene.control.Label;
+import javafx.scene.control.ScrollPane;
 import javafx.scene.control.Spinner;
 import javafx.scene.layout.*;
 import org.kordamp.ikonli.javafx.FontIcon;
@@ -30,6 +31,7 @@ public class WorkHoursDialog implements InlineView {
 
     private WorkHoursDialog() {
         root = new VBox(0);
+        root.setMinSize(0, 0);
         root.getStyleClass().add("work-hours-root");
 
         // --- Header ---
@@ -52,7 +54,6 @@ public class WorkHoursDialog implements InlineView {
         titleBox.getChildren().addAll(title, subtitle);
 
         header.getChildren().addAll(iconPane, titleBox);
-        root.getChildren().add(header);
 
         // --- Schedule Rows ---
         VBox scheduleBox = new VBox(8);
@@ -120,8 +121,6 @@ public class WorkHoursDialog implements InlineView {
             row.getChildren().addAll(dayLabel, checkWrapper, timeBox);
             scheduleBox.getChildren().add(row);
         }
-        root.getChildren().add(scheduleBox);
-
         // --- Footer & Summary ---
         VBox footer = new VBox(15);
         footer.setPadding(new Insets(0, 25, 25, 25));
@@ -165,7 +164,15 @@ public class WorkHoursDialog implements InlineView {
         });
 
         footer.getChildren().addAll(summaryCard, saveBtn);
-        root.getChildren().add(footer);
+
+        VBox body = new VBox(0);
+        body.getChildren().addAll(scheduleBox, footer);
+
+        ScrollPane bodyScroll = InlineLayoutSupport.createContentScroll(body, "work-hours-body-scroll");
+        VBox.setVgrow(bodyScroll, Priority.ALWAYS);
+
+        root.getChildren().addAll(header, bodyScroll);
+        InlineLayoutSupport.makeShrinkable(root, body);
 
         root.getStylesheets().add(getClass().getResource("/styles/app.css").toExternalForm());
         if (isDark) {

@@ -44,6 +44,10 @@ public class PersonalInsightsDialog implements InlineView {
         VBox insightsSection = createInsightsSection(insights);
         content.getChildren().add(insightsSection);
 
+        RhythmSummary rhythm = service.analyzeRhythm(tasks);
+        VBox rhythmSection = createRhythmSection(rhythm);
+        content.getChildren().add(rhythmSection);
+
         scrollPane.setContent(content);
         root.getChildren().add(scrollPane);
         // Адаптивные размеры для низких разрешений
@@ -135,6 +139,59 @@ public class PersonalInsightsDialog implements InlineView {
         return section;
     }
 
+    private VBox createRhythmSection(RhythmSummary rhythm) {
+        VBox section = new VBox(12);
+        section.getStyleClass().add("insights-section");
+        section.setPadding(new Insets(15));
+
+        Label sectionTitle = new Label("Ритм продуктивности");
+        sectionTitle.getStyleClass().add("insights-section-title");
+
+        HBox cards = new HBox(12);
+        cards.getStyleClass().add("rhythm-cards");
+
+        VBox dayCard = createRhythmCard("Лучший день", rhythm.bestDay(), MaterialDesignC.CALENDAR, "rhythm-card-day");
+        VBox timeCard = createRhythmCard("Лучшее время", rhythm.bestTime(), MaterialDesignC.CLOCK_OUTLINE, "rhythm-card-time");
+        cards.getChildren().addAll(dayCard, timeCard);
+
+        VBox tipsBox = new VBox(6);
+        tipsBox.getStyleClass().add("rhythm-tips");
+        if (rhythm.tips().isEmpty()) {
+            Label empty = new Label("Недостаточно данных для рекомендаций");
+            empty.getStyleClass().add("insights-empty");
+            tipsBox.getChildren().add(empty);
+        } else {
+            for (String tip : rhythm.tips()) {
+                Label tipLabel = new Label("• " + tip);
+                tipLabel.getStyleClass().add("rhythm-tip");
+                tipLabel.setWrapText(true);
+                tipsBox.getChildren().add(tipLabel);
+            }
+        }
+
+        section.getChildren().addAll(sectionTitle, cards, tipsBox);
+        return section;
+    }
+
+    private VBox createRhythmCard(String label, String value, Enum<?> iconEnum, String styleClass) {
+        VBox card = new VBox(6);
+        card.setPadding(new Insets(12));
+        card.setPrefWidth(200);
+        card.getStyleClass().addAll("rhythm-card", styleClass);
+
+        FontIcon icon = FontIcon.of((org.kordamp.ikonli.Ikon) iconEnum, 20);
+        icon.getStyleClass().add("rhythm-card-icon");
+
+        Label valueLabel = new Label(value);
+        valueLabel.getStyleClass().add("rhythm-card-value");
+
+        Label nameLabel = new Label(label);
+        nameLabel.getStyleClass().add("rhythm-card-label");
+
+        card.getChildren().addAll(icon, valueLabel, nameLabel);
+        return card;
+    }
+
     private HBox createInsightCard(Insight insight) {
         HBox card = new HBox(12);
         card.setAlignment(Pos.CENTER_LEFT);
@@ -148,9 +205,12 @@ public class PersonalInsightsDialog implements InlineView {
         };
         card.getStyleClass().addAll("insight-card", typeClass);
 
-        Label emoji = new Label(insight.icon());
-        emoji.setStyle("-fx-font-size: 24px;");
-        emoji.setMinWidth(36);
+        FontIcon icon = FontIcon.of(resolveInsightIcon(insight), 22);
+        icon.getStyleClass().add("insight-leading-icon");
+        StackPane iconWrap = new StackPane(icon);
+        iconWrap.getStyleClass().add("insight-leading-icon-wrap");
+        iconWrap.setMinWidth(36);
+        iconWrap.setPrefWidth(36);
 
         VBox textBox = new VBox(2);
         HBox.setHgrow(textBox, Priority.ALWAYS);
@@ -163,9 +223,21 @@ public class PersonalInsightsDialog implements InlineView {
         descLabel.setWrapText(true);
 
         textBox.getChildren().addAll(titleLabel, descLabel);
-        card.getChildren().addAll(emoji, textBox);
+        card.getChildren().addAll(iconWrap, textBox);
 
         return card;
+    }
+
+    private org.kordamp.ikonli.Ikon resolveInsightIcon(Insight insight) {
+        if (insight == null) {
+            return MaterialDesignI.INFORMATION_OUTLINE;
+        }
+        return switch (insight.type()) {
+            case POSITIVE -> MaterialDesignC.CHECK_CIRCLE;
+            case WARNING -> MaterialDesignA.ALERT_CIRCLE;
+            case INFO -> MaterialDesignI.INFORMATION_OUTLINE;
+            case TIP -> MaterialDesignL.LIGHTBULB_ON_OUTLINE;
+        };
     }
 
     public static InlineView inline(List<Task> tasks) {

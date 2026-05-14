@@ -1,6 +1,7 @@
 package com.example.neuroflowplanner.service;
 
 import com.example.neuroflowplanner.model.Task;
+import com.example.neuroflowplanner.util.AsyncContext;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
@@ -49,7 +50,7 @@ public class AIAnalysisCentralService {
      * Analyzes task wording for SMART criteria.
      */
     public CompletableFuture<String> analyzeSmartCriteria(Task task) {
-        return CompletableFuture.supplyAsync(() -> {
+        return AsyncContext.supplyAsync(() -> {
             StringBuilder report = new StringBuilder();
             int score = 0;
             int maxScore = 5;

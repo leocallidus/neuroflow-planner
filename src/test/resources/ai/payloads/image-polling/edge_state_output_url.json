@@ -1,0 +1,8 @@
+{
+  "requestId": "req_1234567890",
+  "state": "done",
+  "outputUrl": "https://cdn.example.test/images/output-final.webp",
+  "extra": {
+    "processingMs": 980
+  }
+}

@@ -66,7 +66,10 @@ public class TimeStatsDialog implements InlineView {
         content.getChildren().add(header);
 
         // --- Metric Cards ---
-        HBox cards = new HBox(15);
+        javafx.scene.layout.FlowPane cards = new javafx.scene.layout.FlowPane();
+        cards.setHgap(15);
+        cards.setVgap(15);
+        cards.setAlignment(Pos.TOP_LEFT);
         cards.getStyleClass().add("timestats-cards");
         cards.getChildren().addAll(
             createCard("Осталось", totalHours + " ч", MaterialDesignT.TIMER_OUTLINE, "timestats-accent-blue"),
@@ -205,8 +208,8 @@ public class TimeStatsDialog implements InlineView {
         VBox card = new VBox(8);
         card.setAlignment(Pos.CENTER_LEFT);
         card.setPadding(new Insets(16));
+        card.setPrefWidth(180);
         card.getStyleClass().addAll("timestats-card", accentClass);
-        HBox.setHgrow(card, Priority.ALWAYS);
 
         HBox top = new HBox(8);
         top.setAlignment(Pos.CENTER_LEFT);

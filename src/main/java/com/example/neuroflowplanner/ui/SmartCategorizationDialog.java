@@ -1,9 +1,12 @@
 package com.example.neuroflowplanner.ui;
 
 import com.example.neuroflowplanner.model.Task;
+import com.example.neuroflowplanner.util.TaskScheduleFormatter;
+import com.example.neuroflowplanner.error.ErrorCode;
 import com.example.neuroflowplanner.service.SmartCategorizationService;
 import com.example.neuroflowplanner.service.SmartCategorizationService.CategorizedTask;
 import com.example.neuroflowplanner.service.SmartCategorizationService.Category;
+import com.example.neuroflowplanner.util.AsyncContext;
 import com.example.neuroflowplanner.util.ConfigManager;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
@@ -27,7 +30,12 @@ public class SmartCategorizationDialog implements InlineView {
     private final SmartCategorizationService service = new SmartCategorizationService();
     private final Consumer<Task> onTaskSelect;
     private Button autoAssignButton;
+    private ProgressBar autoAssignProgress;
+    private Label autoAssignProgressLabel;
     private boolean aiAvailable = false;
+    private boolean autoAssignRunning = false;
+    private SmartCategorizationService.CategorizationJob activeJob;
+    private Consumer<SmartCategorizationService.CategorizeProgress> progressListener;
 
     private SmartCategorizationDialog(List<Task> tasks, Consumer<Task> onTaskSelect) {
         this.onTaskSelect = onTaskSelect;
@@ -82,6 +90,8 @@ public class SmartCategorizationDialog implements InlineView {
         if (isDark) {
             root.getStylesheets().add(getClass().getResource("/styles/dark-theme.css").toExternalForm());
         }
+
+        resumeRunningJobIfAny();
     }
 
     private HBox createHeader() {
@@ -176,18 +186,33 @@ public class SmartCategorizationDialog implements InlineView {
         autoAssignButton = new Button("Запустить");
         autoAssignButton.getStyleClass().add("category-auto-btn");
         autoAssignButton.setMaxWidth(Double.MAX_VALUE);
-        autoAssignButton.setOnAction(e -> runAutoCategorization(autoAssignButton));
+        autoAssignButton.setOnAction(e -> runAutoCategorization());
+
+        // Прогресс
+        autoAssignProgress = new ProgressBar(0);
+        autoAssignProgress.getStyleClass().add("category-auto-progress");
+        autoAssignProgress.setMaxWidth(Double.MAX_VALUE);
+        autoAssignProgress.setVisible(false);
+        autoAssignProgress.setManaged(false);
+
+        autoAssignProgressLabel = new Label("");
+        autoAssignProgressLabel.getStyleClass().add("category-auto-progress-label");
+        autoAssignProgressLabel.setVisible(false);
+        autoAssignProgressLabel.setManaged(false);
         
         // Изначально кнопка недоступна пока не проверим ИИ
         autoAssignButton.setDisable(true);
         autoAssignButton.setText("Проверка...");
 
-        card.getChildren().addAll(iconPane, title, subtitle, autoAssignButton);
+        card.getChildren().addAll(iconPane, title, subtitle, autoAssignButton, autoAssignProgress, autoAssignProgressLabel);
         return card;
     }
 
     private void updateAIButtonState() {
         if (autoAssignButton != null) {
+            if (autoAssignRunning) {
+                return;
+            }
             if (aiAvailable) {
                 autoAssignButton.setDisable(false);
                 autoAssignButton.setText("Запустить");
@@ -200,50 +225,145 @@ public class SmartCategorizationDialog implements InlineView {
         }
     }
 
-    private void runAutoCategorization(Button triggerBtn) {
-        triggerBtn.setDisable(true);
-        triggerBtn.setText("...");
-        triggerBtn.getStyleClass().add("category-auto-btn-loading");
+    private void runAutoCategorization() {
+        AsyncContext.ensureRequestId();
+        SmartCategorizationService.CategorizationJob job = service.startCategorizationWithAI(null);
+        attachToJob(job);
+    }
 
-        service.categorizeAllWithAI().thenAccept(result -> {
-            javafx.application.Platform.runLater(() -> {
-                // Показываем результат
+    private void updateProgress(SmartCategorizationService.CategorizeProgress progress) {
+        if (autoAssignProgress == null || autoAssignProgressLabel == null) {
+            return;
+        }
+        if (progress.total() <= 0) {
+            autoAssignProgress.setProgress(0);
+            updateProgressLabel("Нет задач для обработки");
+            return;
+        }
+        double pct = progress.processed() / (double) progress.total();
+        autoAssignProgress.setProgress(pct);
+        String etaText = formatEta(progress.etaMillis());
+        updateProgressLabel(progress.processed() + "/" + progress.total() + " • " + etaText);
+    }
+
+    private void showAutoAssignProgress(boolean visible) {
+        if (autoAssignProgress != null) {
+            autoAssignProgress.setVisible(visible);
+            autoAssignProgress.setManaged(visible);
+        }
+        if (autoAssignProgressLabel != null) {
+            autoAssignProgressLabel.setVisible(visible);
+            autoAssignProgressLabel.setManaged(visible);
+        }
+    }
+
+    private void updateProgressLabel(String text) {
+        if (autoAssignProgressLabel != null) {
+            autoAssignProgressLabel.setText(text);
+        }
+    }
+
+    private String formatEta(long etaMillis) {
+        if (etaMillis < 0) {
+            return "расчёт...";
+        }
+        long totalSeconds = Math.max(0, etaMillis / 1000);
+        long minutes = totalSeconds / 60;
+        long seconds = totalSeconds % 60;
+        if (minutes >= 60) {
+            long hours = minutes / 60;
+            long remMinutes = minutes % 60;
+            return String.format("осталось ~%d:%02d:%02d", hours, remMinutes, seconds);
+        }
+        return String.format("осталось ~%d:%02d", minutes, seconds);
+    }
+
+    private void resumeRunningJobIfAny() {
+        SmartCategorizationService.CategorizationJob job = service.getActiveCategorizationJob();
+        if (job != null) {
+            attachToJob(job);
+        }
+    }
+
+    private void attachToJob(SmartCategorizationService.CategorizationJob job) {
+        if (job == null) {
+            return;
+        }
+        detachFromJob();
+        activeJob = job;
+        progressListener = progress -> javafx.application.Platform.runLater(() -> updateProgress(progress));
+        activeJob.addListener(progressListener);
+
+        if (activeJob.isRunning()) {
+            autoAssignRunning = true;
+            autoAssignButton.setDisable(true);
+            autoAssignButton.setText("В работе...");
+            autoAssignButton.getStyleClass().add("category-auto-btn-loading");
+            showAutoAssignProgress(true);
+            SmartCategorizationService.CategorizeProgress last = activeJob.getLastProgress();
+            if (last != null) {
+                updateProgress(last);
+            } else {
+                updateProgressLabel("Подготовка...");
+            }
+            SmartCategorizationService.CategorizationJob jobRef = activeJob;
+            activeJob.future().thenAccept(result -> javafx.application.Platform.runLater(() -> {
+                if (activeJob != jobRef) {
+                    return;
+                }
+                autoAssignRunning = false;
                 showResultNotification(result);
-                
-                // Восстанавливаем кнопку
-                triggerBtn.setText("Готово ✓");
-                triggerBtn.getStyleClass().remove("category-auto-btn-loading");
-                triggerBtn.getStyleClass().add("category-auto-btn-success");
-                
-                // Обновляем содержимое диалога
+                autoAssignButton.setText("Готово ✓");
+                autoAssignButton.getStyleClass().remove("category-auto-btn-loading");
+                autoAssignButton.getStyleClass().add("category-auto-btn-success");
+                updateProgressLabel("Готово • обновлено " + result.updated());
                 refreshContent();
-                
-                // Через 1.5 секунды возвращаем нормальное состояние
-                new Thread(() -> {
-                    try { Thread.sleep(1500); } catch (InterruptedException ignored) {}
-                    javafx.application.Platform.runLater(() -> {
-                        triggerBtn.getStyleClass().remove("category-auto-btn-success");
-                        updateAIButtonState();
-                    });
-                }).start();
+                autoAssignButton.getStyleClass().remove("category-auto-btn-success");
+                showAutoAssignProgress(false);
+                updateAIButtonState();
+            })).exceptionally(ex -> {
+                if (activeJob != jobRef) {
+                    return null;
+                }
+                AsyncErrorHandler.reportAsyncException(
+                    ex,
+                    root.getScene() != null ? root.getScene().getWindow() : null,
+                    isDark,
+                    "Ошибка умной категоризации",
+                    ErrorCode.AI_REQUEST_FAILED,
+                    "Не удалось завершить умную категоризацию. Попробуйте позже.",
+                    true,
+                    "smart.categorization.dialog.job.failed",
+                    "operation", "categorizeAllWithAI"
+                );
+                javafx.application.Platform.runLater(() -> {
+                    if (activeJob != jobRef) {
+                        return;
+                    }
+                    autoAssignRunning = false;
+                    autoAssignButton.setText("Ошибка");
+                    autoAssignButton.getStyleClass().remove("category-auto-btn-loading");
+                    autoAssignButton.getStyleClass().add("category-auto-btn-error");
+                    updateProgressLabel("Ошибка при обработке");
+                    autoAssignButton.getStyleClass().remove("category-auto-btn-error");
+                    showAutoAssignProgress(false);
+                    updateAIButtonState();
+                });
+                return null;
             });
-        }).exceptionally(ex -> {
-            javafx.application.Platform.runLater(() -> {
-                triggerBtn.setText("Ошибка");
-                triggerBtn.getStyleClass().remove("category-auto-btn-loading");
-                triggerBtn.getStyleClass().add("category-auto-btn-error");
-                
-                // Через 2 секунды восстанавливаем нормальное состояние
-                new Thread(() -> {
-                    try { Thread.sleep(2000); } catch (InterruptedException ignored) {}
-                    javafx.application.Platform.runLater(() -> {
-                        triggerBtn.getStyleClass().remove("category-auto-btn-error");
-                        updateAIButtonState();
-                    });
-                }).start();
-            });
-            return null;
-        });
+        } else {
+            autoAssignRunning = false;
+            updateAIButtonState();
+            detachFromJob();
+        }
+    }
+
+    private void detachFromJob() {
+        if (activeJob != null && progressListener != null) {
+            activeJob.removeListener(progressListener);
+        }
+        activeJob = null;
+        progressListener = null;
     }
 
     private void showResultNotification(SmartCategorizationService.CategorizeResult result) {
@@ -313,7 +433,7 @@ public class SmartCategorizationDialog implements InlineView {
         String emoji = cat != null ? cat.icon() : "📋";
         
         Label emojiLabel = new Label(emoji);
-        emojiLabel.setStyle("-fx-font-size: 20px;");
+        emojiLabel.getStyleClass().add("category-emoji");
 
         Label nameLabel = new Label(categoryName);
         nameLabel.getStyleClass().add("category-section-title");
@@ -361,7 +481,7 @@ public class SmartCategorizationDialog implements InlineView {
         tagsLabel.getStyleClass().add("category-task-tags");
 
         // Deadline
-        Label deadlineLabel = new Label(ct.task().getDeadline().toString());
+        Label deadlineLabel = new Label(TaskScheduleFormatter.formatDeadline(ct.task()));
         deadlineLabel.getStyleClass().add("category-task-deadline");
 
         row.getChildren().addAll(dot, titleLabel, tagsLabel, deadlineLabel);
@@ -385,7 +505,7 @@ public class SmartCategorizationDialog implements InlineView {
     public Node getContent() { return root; }
 
     @Override
-    public Runnable getOnClose() { return null; }
+    public Runnable getOnClose() { return this::detachFromJob; }
 
     @Override
     public void setCloseAction(Runnable closeAction) { this.closeAction = closeAction; }

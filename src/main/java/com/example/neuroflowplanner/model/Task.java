@@ -4,6 +4,8 @@ import javafx.beans.property.*;
 import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.util.UUID;
 
 public class Task {
@@ -21,8 +23,10 @@ public class Task {
     private final BooleanProperty archived = new SimpleBooleanProperty(false);
     private final LongProperty trackedMinutes = new SimpleLongProperty(0);
     private final ObjectProperty<LocalDate> startDate = new SimpleObjectProperty<>();
+    private final ObjectProperty<LocalTime> startTime = new SimpleObjectProperty<>();
     private final BooleanProperty completed = new SimpleBooleanProperty(false);
     private final ObjectProperty<LocalDate> completedDate = new SimpleObjectProperty<>();
+    private final ObjectProperty<LocalTime> deadlineTime = new SimpleObjectProperty<>();
     private final ObservableList<Task> subtasks = FXCollections.observableArrayList();
 
     public Task(String title, String description, LocalDate deadline, int complexity) {
@@ -83,9 +87,32 @@ public class Task {
     public StringProperty recurrenceProperty() { return recurrence; }
     public boolean isRecurring() { return recurrence.get() != null && !recurrence.get().isEmpty(); }
 
+    /**
+     * @deprecated Legacy CSV projection for compatibility only.
+     * Use task dependency APIs from TaskApplicationService instead.
+     */
+    @Deprecated(since = "7.0", forRemoval = false)
     public String getDependsOn() { return dependsOn.get(); }
+
+    /**
+     * @deprecated Legacy CSV projection for compatibility only.
+     * Use task dependency APIs from TaskApplicationService instead.
+     */
+    @Deprecated(since = "7.0", forRemoval = false)
     public void setDependsOn(String value) { dependsOn.set(value != null ? value : ""); }
+
+    /**
+     * @deprecated Legacy CSV projection for compatibility only.
+     * Use task dependency APIs from TaskApplicationService instead.
+     */
+    @Deprecated(since = "7.0", forRemoval = false)
     public StringProperty dependsOnProperty() { return dependsOn; }
+
+    /**
+     * @deprecated Legacy CSV projection for compatibility only.
+     * Use task dependency APIs from TaskApplicationService instead.
+     */
+    @Deprecated(since = "7.0", forRemoval = false)
     public boolean hasDependencies() { return dependsOn.get() != null && !dependsOn.get().isEmpty(); }
 
     public boolean isArchived() { return archived.get(); }
@@ -101,12 +128,41 @@ public class Task {
     public void setStartDate(LocalDate value) { startDate.set(value); }
     public ObjectProperty<LocalDate> startDateProperty() { return startDate; }
     public boolean hasStartDate() { return startDate.get() != null; }
-    public boolean isStarted() { return startDate.get() == null || !startDate.get().isAfter(LocalDate.now()); }
+    public LocalTime getStartTime() { return startTime.get(); }
+    public void setStartTime(LocalTime value) { startTime.set(value); }
+    public ObjectProperty<LocalTime> startTimeProperty() { return startTime; }
+    public boolean hasStartTime() { return startTime.get() != null; }
+    public LocalDateTime getStartDateTime() {
+        if (startDate.get() == null) {
+            return null;
+        }
+        return LocalDateTime.of(startDate.get(), startTime.get() != null ? startTime.get() : LocalTime.MIN);
+    }
+    public boolean isStarted() {
+        if (startDate.get() == null) {
+            return true;
+        }
+        if (startTime.get() == null) {
+            return !startDate.get().isAfter(LocalDate.now());
+        }
+        return !getStartDateTime().isAfter(LocalDateTime.now());
+    }
 
     public boolean isCompleted() { return completed.get(); }
     public void setCompleted(boolean value) { completed.set(value); }
     public BooleanProperty completedProperty() { return completed; }
     
+    public LocalTime getDeadlineTime() { return deadlineTime.get(); }
+    public void setDeadlineTime(LocalTime value) { deadlineTime.set(value); }
+    public ObjectProperty<LocalTime> deadlineTimeProperty() { return deadlineTime; }
+    public boolean hasDeadlineTime() { return deadlineTime.get() != null; }
+    public LocalDateTime getDeadlineDateTime() {
+        if (deadline.get() == null) {
+            return null;
+        }
+        return LocalDateTime.of(deadline.get(), deadlineTime.get() != null ? deadlineTime.get() : LocalTime.MAX);
+    }
+
     public LocalDate getCompletedDate() { return completedDate.get(); }
     public void setCompletedDate(LocalDate value) { completedDate.set(value); }
     public ObjectProperty<LocalDate> completedDateProperty() { return completedDate; }

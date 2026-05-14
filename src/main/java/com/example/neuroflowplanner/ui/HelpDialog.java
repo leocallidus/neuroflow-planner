@@ -22,8 +22,7 @@ public class HelpDialog implements InlineView {
 
     private HelpDialog() {
         root = new VBox(0);
-        // Адаптивные размеры для низких разрешений
-        root.setMinSize(400, 350);
+        root.setMinSize(0, 0);
         root.getStyleClass().add("help-dialog-root");
 
         // --- Header ---
@@ -52,6 +51,7 @@ public class HelpDialog implements InlineView {
         TabPane tabPane = new TabPane();
         tabPane.setTabClosingPolicy(TabPane.TabClosingPolicy.UNAVAILABLE);
         tabPane.getStyleClass().add("help-tab-pane");
+        InlineLayoutSupport.makeShrinkable(tabPane);
         VBox.setVgrow(tabPane, Priority.ALWAYS);
 
         tabPane.getTabs().addAll(createAboutTab(), createGuideTab());
@@ -111,10 +111,10 @@ public class HelpDialog implements InlineView {
         VBox textBox = new VBox(10);
         textBox.setAlignment(Pos.CENTER);
         
-        Label appName = new Label("НейроФлоу Планировщик");
+        Label appName = new Label("НейроПоток Планировщик");
         appName.getStyleClass().add("help-app-name");
 
-        Label version = new Label("Версия 1.0");
+        Label version = new Label("Версия 2.0");
         version.getStyleClass().add("help-version");
 
         Label description = new Label(
@@ -138,7 +138,9 @@ public class HelpDialog implements InlineView {
         infoBox.setAlignment(Pos.CENTER_LEFT);
 
         infoBox.getChildren().addAll(
-            createInfoRow(MaterialDesignA.ACCOUNT, "Автор", "leocallidus"),
+            createInfoRow(MaterialDesignA.ACCOUNT, "Автор", "Алексеев Леонид"),
+            createInfoRow(MaterialDesignS.SCHOOL, "Группа", "ИСП-31"),
+            createInfoRow(MaterialDesignE.EMAIL, "Email", "leoalekseev27@xmail.ru"),
             createInfoRow(MaterialDesignG.GITHUB, "GitHub", "github.com/leocallidus")
         );
 
@@ -147,6 +149,7 @@ public class HelpDialog implements InlineView {
         ScrollPane scroll = new ScrollPane(content);
         scroll.setFitToWidth(true);
         scroll.getStyleClass().add("help-scroll-pane");
+        InlineLayoutSupport.makeShrinkable(scroll, content);
         tab.setContent(scroll);
         return tab;
     }
@@ -203,6 +206,7 @@ public class HelpDialog implements InlineView {
         ScrollPane scroll = new ScrollPane(content);
         scroll.setFitToWidth(true);
         scroll.getStyleClass().add("help-scroll-pane");
+        InlineLayoutSupport.makeShrinkable(scroll, content);
         tab.setContent(scroll);
         return tab;
     }

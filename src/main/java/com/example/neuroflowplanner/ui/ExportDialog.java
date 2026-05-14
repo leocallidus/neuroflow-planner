@@ -1,6 +1,9 @@
 package com.example.neuroflowplanner.ui;
 
+import com.example.neuroflowplanner.error.ErrorCode;
 import com.example.neuroflowplanner.model.Task;
+import com.example.neuroflowplanner.service.task.DefaultTaskExportService;
+import com.example.neuroflowplanner.service.task.TaskExportService;
 import com.example.neuroflowplanner.util.ConfigManager;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
@@ -47,9 +50,11 @@ import java.util.List;
  * Inline export view.
  */
 public class ExportDialog implements InlineView {
+    private static final DateTimeFormatter EXPORT_FILE_TIMESTAMP = DateTimeFormatter.ofPattern("yyyyMMdd_HHmm");
 
     private final ScrollPane root;
     private final boolean isDark = ConfigManager.isDarkTheme();
+    private final TaskExportService taskExportService = new DefaultTaskExportService();
     private Runnable closeAction;
 
     private ExportDialog(List<Task> tasks) {
@@ -70,7 +75,7 @@ public class ExportDialog implements InlineView {
         VBox titleBox = new VBox(4);
         Label title = new Label("Экспорт Данных");
         title.getStyleClass().add("export-title");
-        Label subtitle = new Label("Сохраните ваши задачи в удобном формате");
+        Label subtitle = new Label("Сохраните задачи в форматах для отчёта, обмена и обратного импорта");
         subtitle.getStyleClass().add("export-subtitle");
         titleBox.getChildren().addAll(title, subtitle);
 
@@ -122,13 +127,23 @@ public class ExportDialog implements InlineView {
             () -> exportMarkdown(tasks)
         );
 
+        VBox jsonCard = createExportCard(
+            "JSON (.json)",
+            "Каноничный переносимый формат, совместимый с импортом задач",
+            MaterialDesignC.CODE_JSON,
+            "export-card-json",
+            () -> exportJson(tasks)
+        );
+
         grid.add(excelCard, 0, 0);
         grid.add(pdfCard, 1, 0);
         grid.add(csvCard, 0, 1);
         grid.add(docxCard, 1, 1);
         grid.add(mdCard, 0, 2);
+        grid.add(jsonCard, 1, 2);
         
         content.getChildren().add(grid);
+        content.getChildren().add(createPortabilityHintBox());
 
         root = new ScrollPane(content);
         root.setFitToWidth(true);
@@ -194,12 +209,34 @@ public class ExportDialog implements InlineView {
         return card;
     }
 
+    private VBox createPortabilityHintBox() {
+        VBox hintBox = new VBox(6);
+        hintBox.getStyleClass().add("export-hint-box");
+
+        Label title = new Label("JSON для переноса");
+        title.getStyleClass().add("export-hint-title");
+
+        Label body = new Label(
+            "JSON-экспорт предназначен для переноса задач между инстансами приложения и совместим с текущим импортом задач. " +
+            "Импорт доступен через Инструменты -> Импорт задач."
+        );
+        body.getStyleClass().add("export-hint-body");
+        body.setWrapText(true);
+
+        hintBox.getChildren().addAll(title, body);
+        return hintBox;
+    }
+
+    private File chooseExportFile(String formatLabel, String extensionPattern, String extension) {
+        FileChooser chooser = new FileChooser();
+        chooser.setTitle("Экспорт задач в " + formatLabel);
+        chooser.getExtensionFilters().add(new FileChooser.ExtensionFilter(formatLabel, extensionPattern));
+        chooser.setInitialFileName(generateFileName(extension));
+        return chooser.showSaveDialog(root.getScene() != null ? root.getScene().getWindow() : null);
+    }
+
     private void exportExcel(List<Task> tasks) {
-        FileChooser fc = new FileChooser();
-        fc.setTitle("Сохранить Excel");
-        fc.getExtensionFilters().add(new FileChooser.ExtensionFilter("Excel", "*.xlsx"));
-        fc.setInitialFileName(generateFileName("xlsx"));
-        File file = fc.showSaveDialog(root.getScene() != null ? root.getScene().getWindow() : null);
+        File file = chooseExportFile("Excel (*.xlsx)", "*.xlsx", "xlsx");
         if (file == null) return;
 
         try (XSSFWorkbook wb = new XSSFWorkbook(); FileOutputStream fos = new FileOutputStream(file)) {
@@ -219,7 +256,7 @@ public class ExportDialog implements InlineView {
             // Заголовок документа
             Row titleRow = sheet.createRow(rowNum++);
             org.apache.poi.ss.usermodel.Cell titleCell = titleRow.createCell(0);
-            titleCell.setCellValue("НейроФлоу Планировщик");
+            titleCell.setCellValue("НейроПоток Планировщик");
             titleCell.setCellStyle(titleStyle);
             sheet.addMergedRegion(new CellRangeAddress(0, 0, 0, 5));
             
@@ -275,7 +312,17 @@ public class ExportDialog implements InlineView {
             wb.write(fos);
             showSuccessDialog("Excel успешно сохранён", file.getName(), file.getAbsolutePath());
         } catch (Exception ex) {
-            showErrorDialog("Ошибка экспорта Excel", ex.getMessage());
+            UiErrorNotifier.showMappedError(
+                root.getScene() != null ? root.getScene().getWindow() : null,
+                isDark,
+                "Ошибка экспорта Excel",
+                ex,
+                ErrorCode.EXPORT_EXCEL_FAILED,
+                "Не удалось экспортировать данные в Excel.",
+                false,
+                "operation", "exportExcel",
+                "fileName", file.getName()
+            );
         }
     }
     
@@ -414,11 +461,7 @@ public class ExportDialog implements InlineView {
     }
 
     private void exportPdf(List<Task> tasks) {
-        FileChooser fc = new FileChooser();
-        fc.setTitle("Сохранить PDF");
-        fc.getExtensionFilters().add(new FileChooser.ExtensionFilter("PDF", "*.pdf"));
-        fc.setInitialFileName(generateFileName("pdf"));
-        File file = fc.showSaveDialog(root.getScene() != null ? root.getScene().getWindow() : null);
+        File file = chooseExportFile("PDF (*.pdf)", "*.pdf", "pdf");
         if (file == null) return;
 
         try {
@@ -464,7 +507,7 @@ public class ExportDialog implements InlineView {
             DeviceRgb headerBg = new DeviceRgb(239, 241, 245);
             DeviceRgb textColor = new DeviceRgb(76, 79, 105);
             
-            doc.add(new Paragraph("НейроФлоу Планировщик")
+            doc.add(new Paragraph("НейроПоток Планировщик")
                 .setFont(fontBold)
                 .setFontSize(22)
                 .setFontColor(primaryColor)
@@ -524,7 +567,7 @@ public class ExportDialog implements InlineView {
             doc.add(table);
             
             // Футер
-            doc.add(new Paragraph("\n© НейроФлоу Планировщик " + LocalDate.now().getYear())
+            doc.add(new Paragraph("\n© НейроПоток Планировщик " + LocalDate.now().getYear())
                 .setFont(font)
                 .setFontSize(8)
                 .setFontColor(new DeviceRgb(140, 143, 161))
@@ -534,7 +577,17 @@ public class ExportDialog implements InlineView {
             doc.close();
             showSuccessDialog("PDF успешно сохранён", file.getName(), file.getAbsolutePath());
         } catch (Exception ex) {
-            showErrorDialog("Ошибка экспорта PDF", ex.getMessage());
+            UiErrorNotifier.showMappedError(
+                root.getScene() != null ? root.getScene().getWindow() : null,
+                isDark,
+                "Ошибка экспорта PDF",
+                ex,
+                ErrorCode.EXPORT_PDF_FAILED,
+                "Не удалось экспортировать данные в PDF.",
+                false,
+                "operation", "exportPdf",
+                "fileName", file.getName()
+            );
         }
     }
 
@@ -579,11 +632,7 @@ public class ExportDialog implements InlineView {
     }
 
     private void exportCsv(List<Task> tasks) {
-        FileChooser fc = new FileChooser();
-        fc.setTitle("Сохранить CSV");
-        fc.getExtensionFilters().add(new FileChooser.ExtensionFilter("CSV", "*.csv"));
-        fc.setInitialFileName(generateFileName("csv"));
-        File file = fc.showSaveDialog(root.getScene() != null ? root.getScene().getWindow() : null);
+        File file = chooseExportFile("CSV (*.csv)", "*.csv", "csv");
         if (file == null) return;
 
         try (PrintWriter pw = new PrintWriter(new OutputStreamWriter(new FileOutputStream(file), "UTF-8"))) {
@@ -596,7 +645,17 @@ public class ExportDialog implements InlineView {
             }
             showSuccessDialog("CSV успешно сохранён", file.getName(), file.getAbsolutePath());
         } catch (Exception ex) {
-            showErrorDialog("Ошибка экспорта CSV", ex.getMessage());
+            UiErrorNotifier.showMappedError(
+                root.getScene() != null ? root.getScene().getWindow() : null,
+                isDark,
+                "Ошибка экспорта CSV",
+                ex,
+                ErrorCode.EXPORT_CSV_FAILED,
+                "Не удалось экспортировать данные в CSV.",
+                false,
+                "operation", "exportCsv",
+                "fileName", file.getName()
+            );
         }
     }
 
@@ -612,11 +671,7 @@ public class ExportDialog implements InlineView {
     }
     
     private void exportDocx(List<Task> tasks) {
-        FileChooser fc = new FileChooser();
-        fc.setTitle("Сохранить Word");
-        fc.getExtensionFilters().add(new FileChooser.ExtensionFilter("Word", "*.docx"));
-        fc.setInitialFileName(generateFileName("docx"));
-        File file = fc.showSaveDialog(root.getScene() != null ? root.getScene().getWindow() : null);
+        File file = chooseExportFile("Word (*.docx)", "*.docx", "docx");
         if (file == null) return;
 
         try (XWPFDocument doc = new XWPFDocument(); FileOutputStream fos = new FileOutputStream(file)) {
@@ -624,7 +679,7 @@ public class ExportDialog implements InlineView {
             XWPFParagraph titlePara = doc.createParagraph();
             titlePara.setAlignment(ParagraphAlignment.CENTER);
             XWPFRun titleRun = titlePara.createRun();
-            titleRun.setText("НейроФлоу Планировщик");
+            titleRun.setText("НейроПоток Планировщик");
             titleRun.setBold(true);
             titleRun.setFontSize(24);
             titleRun.setColor("1E66F5");
@@ -687,7 +742,7 @@ public class ExportDialog implements InlineView {
             footerPara.setAlignment(ParagraphAlignment.CENTER);
             footerPara.setSpacingBefore(400);
             XWPFRun footerRun = footerPara.createRun();
-            footerRun.setText("© НейроФлоу Планировщик " + LocalDate.now().getYear());
+            footerRun.setText("© НейроПоток Планировщик " + LocalDate.now().getYear());
             footerRun.setFontSize(9);
             footerRun.setColor("8C8FA1");
             footerRun.setFontFamily("Arial");
@@ -695,7 +750,17 @@ public class ExportDialog implements InlineView {
             doc.write(fos);
             showSuccessDialog("Word успешно сохранён", file.getName(), file.getAbsolutePath());
         } catch (Exception ex) {
-            showErrorDialog("Ошибка экспорта Word", ex.getMessage());
+            UiErrorNotifier.showMappedError(
+                root.getScene() != null ? root.getScene().getWindow() : null,
+                isDark,
+                "Ошибка экспорта Word",
+                ex,
+                ErrorCode.EXPORT_DOCX_FAILED,
+                "Не удалось экспортировать данные в Word.",
+                false,
+                "operation", "exportDocx",
+                "fileName", file.getName()
+            );
         }
     }
     
@@ -736,16 +801,12 @@ public class ExportDialog implements InlineView {
     }
     
     private void exportMarkdown(List<Task> tasks) {
-        FileChooser fc = new FileChooser();
-        fc.setTitle("Сохранить Markdown");
-        fc.getExtensionFilters().add(new FileChooser.ExtensionFilter("Markdown", "*.md"));
-        fc.setInitialFileName(generateFileName("md"));
-        File file = fc.showSaveDialog(root.getScene() != null ? root.getScene().getWindow() : null);
+        File file = chooseExportFile("Markdown (*.md)", "*.md", "md");
         if (file == null) return;
 
         try (PrintWriter pw = new PrintWriter(new OutputStreamWriter(new FileOutputStream(file), "UTF-8"))) {
             // Заголовок
-            pw.println("# 🧠 НейроФлоу Планировщик");
+            pw.println("# 🧠 НейроПоток Планировщик");
             pw.println();
             pw.println("## Отчёт по задачам");
             pw.println();
@@ -783,11 +844,43 @@ public class ExportDialog implements InlineView {
             pw.println();
             pw.println("---");
             pw.println();
-            pw.println("*© НейроФлоу Планировщик " + LocalDate.now().getYear() + "*");
+            pw.println("*© НейроПоток Планировщик " + LocalDate.now().getYear() + "*");
             
             showSuccessDialog("Markdown успешно сохранён", file.getName(), file.getAbsolutePath());
         } catch (Exception ex) {
-            showErrorDialog("Ошибка экспорта Markdown", ex.getMessage());
+            UiErrorNotifier.showMappedError(
+                root.getScene() != null ? root.getScene().getWindow() : null,
+                isDark,
+                "Ошибка экспорта Markdown",
+                ex,
+                ErrorCode.EXPORT_MARKDOWN_FAILED,
+                "Не удалось экспортировать данные в Markdown.",
+                false,
+                "operation", "exportMarkdown",
+                "fileName", file.getName()
+            );
+        }
+    }
+
+    private void exportJson(List<Task> tasks) {
+        File file = chooseExportFile("JSON (*.json)", "*.json", "json");
+        if (file == null) return;
+
+        try {
+            taskExportService.exportTasksJson(file, tasks);
+            showSuccessDialog("JSON успешно сохранён", file.getName(), file.getAbsolutePath());
+        } catch (Exception ex) {
+            UiErrorNotifier.showMappedError(
+                root.getScene() != null ? root.getScene().getWindow() : null,
+                isDark,
+                "Ошибка экспорта JSON",
+                ex,
+                ErrorCode.EXPORT_JSON_FAILED,
+                "Не удалось экспортировать задачи в JSON.",
+                false,
+                "operation", "exportJson",
+                "fileName", file.getName()
+            );
         }
     }
     
@@ -808,8 +901,8 @@ public class ExportDialog implements InlineView {
     }
     
     private String generateFileName(String extension) {
-        String timestamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd_HHmm"));
-        return "tasks_report_" + timestamp + "." + extension;
+        String timestamp = LocalDateTime.now().format(EXPORT_FILE_TIMESTAMP);
+        return "neuroflow_tasks_" + timestamp + "." + extension;
     }
 
     private void showSuccessDialog(String title, String fileName, String filePath) {
@@ -875,56 +968,4 @@ public class ExportDialog implements InlineView {
         dialog.showAndWait();
     }
 
-    private void showErrorDialog(String title, String message) {
-        Dialog<ButtonType> dialog = new Dialog<>();
-        dialog.setTitle("Ошибка экспорта");
-        dialog.setHeaderText(null);
-        
-        DialogPane dialogPane = dialog.getDialogPane();
-        dialogPane.getStylesheets().add(getClass().getResource("/styles/app.css").toExternalForm());
-        if (isDark) {
-            dialogPane.getStylesheets().add(getClass().getResource("/styles/dark-theme.css").toExternalForm());
-        }
-        dialogPane.getStyleClass().add("styled-alert");
-        dialogPane.setPrefWidth(400);
-        
-        VBox content = new VBox(16);
-        content.setPadding(new Insets(20));
-        content.setAlignment(Pos.CENTER);
-        
-        // Error icon
-        StackPane iconBox = new StackPane();
-        iconBox.setMinSize(64, 64);
-        iconBox.setMaxSize(64, 64);
-        iconBox.setStyle("-fx-background-color: " + (isDark ? "rgba(243,139,168,0.15)" : "rgba(210,15,57,0.1)") + "; -fx-background-radius: 50%;");
-        FontIcon errorIcon = FontIcon.of(MaterialDesignA.ALERT_CIRCLE, 32);
-        errorIcon.setIconColor(javafx.scene.paint.Color.web(isDark ? "#f38ba8" : "#d20f39"));
-        iconBox.getChildren().add(errorIcon);
-        
-        Label titleLbl = new Label(title);
-        titleLbl.setStyle("-fx-font-size: 18px; -fx-font-weight: bold; -fx-text-fill: " + (isDark ? "#cdd6f4" : "#4c4f69") + ";");
-        
-        VBox msgBox = new VBox(4);
-        msgBox.setAlignment(Pos.CENTER);
-        msgBox.setPadding(new Insets(12));
-        msgBox.setStyle("-fx-background-color: " + (isDark ? "rgba(243,139,168,0.08)" : "rgba(210,15,57,0.05)") + "; -fx-background-radius: 10;");
-        
-        Label msgLabel = new Label(message != null ? message : "Неизвестная ошибка");
-        msgLabel.setStyle("-fx-font-size: 12px; -fx-text-fill: " + (isDark ? "#f38ba8" : "#d20f39") + ";");
-        msgLabel.setWrapText(true);
-        msgLabel.setMaxWidth(320);
-        
-        msgBox.getChildren().add(msgLabel);
-        
-        content.getChildren().addAll(iconBox, titleLbl, msgBox);
-        dialogPane.setContent(content);
-        
-        ButtonType okBtn = new ButtonType("Понятно", ButtonBar.ButtonData.OK_DONE);
-        dialogPane.getButtonTypes().add(okBtn);
-        
-        if (root.getScene() != null && root.getScene().getWindow() != null) {
-            dialog.initOwner(root.getScene().getWindow());
-        }
-        dialog.showAndWait();
-    }
 }

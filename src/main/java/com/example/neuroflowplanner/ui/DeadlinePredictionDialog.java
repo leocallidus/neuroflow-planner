@@ -2,6 +2,7 @@ package com.example.neuroflowplanner.ui;
 
 import com.example.neuroflowplanner.model.Task;
 import com.example.neuroflowplanner.service.DeadlinePredictionService;
+import com.example.neuroflowplanner.util.TaskScheduleFormatter;
 import com.example.neuroflowplanner.util.ConfigManager;
 import javafx.beans.property.SimpleStringProperty;
 import javafx.geometry.Insets;
@@ -26,6 +27,7 @@ public class DeadlinePredictionDialog implements InlineView {
 
     private DeadlinePredictionDialog(List<Task> tasks) {
         root = new VBox(0);
+        root.setMinSize(0, 0);
         root.getStyleClass().add("deadline-root");
 
         // Header
@@ -36,11 +38,13 @@ public class DeadlinePredictionDialog implements InlineView {
         ScrollPane scrollPane = new ScrollPane();
         scrollPane.setFitToWidth(true);
         scrollPane.getStyleClass().add("deadline-scroll");
+        InlineLayoutSupport.makeShrinkable(scrollPane);
         VBox.setVgrow(scrollPane, Priority.ALWAYS);
 
         VBox content = new VBox(20);
         content.setPadding(new Insets(20, 25, 25, 25));
         content.getStyleClass().add("deadline-content");
+        InlineLayoutSupport.makeShrinkable(content);
 
         // Analyze risks
         List<DeadlinePredictionService.TaskRiskAnalysis> risks = service.analyzeRisks(tasks);
@@ -61,8 +65,6 @@ public class DeadlinePredictionDialog implements InlineView {
 
         scrollPane.setContent(content);
         root.getChildren().add(scrollPane);
-        // Адаптивные размеры для низких разрешений
-        root.setMinSize(450, 400);
 
         root.getStylesheets().add(getClass().getResource("/styles/app.css").toExternalForm());
         if (isDark) {
@@ -216,6 +218,7 @@ public class DeadlinePredictionDialog implements InlineView {
         table.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY);
         table.setPrefHeight(350);
         table.getStyleClass().add("deadline-table");
+        table.setMinHeight(0);
         VBox.setVgrow(table, Priority.ALWAYS);
 
         TableColumn<DeadlinePredictionService.TaskRiskAnalysis, String> taskCol = new TableColumn<>("Задача");
@@ -223,7 +226,7 @@ public class DeadlinePredictionDialog implements InlineView {
         taskCol.setPrefWidth(200);
 
         TableColumn<DeadlinePredictionService.TaskRiskAnalysis, String> dateCol = new TableColumn<>("Дедлайн");
-        dateCol.setCellValueFactory(data -> new SimpleStringProperty(data.getValue().task().getDeadline().toString()));
+        dateCol.setCellValueFactory(data -> new SimpleStringProperty(TaskScheduleFormatter.formatDeadline(data.getValue().task())));
         dateCol.setPrefWidth(100);
 
         TableColumn<DeadlinePredictionService.TaskRiskAnalysis, String> riskCol = new TableColumn<>("Уровень риска");

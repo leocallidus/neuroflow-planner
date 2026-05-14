@@ -1,0 +1,9 @@
+{
+  "model": "llama3",
+  "created_at": "2026-02-22T10:00:00Z",
+  "message": {
+    "role": "assistant",
+    "content": "Ollama says hello."
+  },
+  "done": true
+}

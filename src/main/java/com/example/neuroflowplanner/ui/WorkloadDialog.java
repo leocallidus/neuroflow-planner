@@ -159,8 +159,7 @@ public class WorkloadDialog implements InlineView {
 
         root = new ScrollPane(content);
         root.setFitToWidth(true);
-        // Адаптивные размеры для низких разрешений
-        root.setMinSize(400, 400);
+        InlineLayoutSupport.makeShrinkable(root, content);
         root.getStyleClass().add("workload-root");
         
         root.getStylesheets().add(getClass().getResource("/styles/app.css").toExternalForm());

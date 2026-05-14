@@ -1,0 +1,322 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: maven
+
+      - name: Ensure Maven Wrapper is executable
+        run: chmod +x ./mvnw
+
+      - name: Guard forbidden error output calls in production code
+        run: |
+          if command -v rg >/dev/null 2>&1; then
+            if rg -n --glob '*.java' 'printStackTrace\s*\(|System\.err\.println\s*\(' src/main/java; then
+              echo "Forbidden printStackTrace/System.err.println usage detected in src/main/java."
+              exit 1
+            fi
+          else
+            if grep -RInE --include='*.java' 'printStackTrace[[:space:]]*\(|System\.err\.println[[:space:]]*\(' src/main/java; then
+              echo "Forbidden printStackTrace/System.err.println usage detected in src/main/java."
+              exit 1
+            fi
+          fi
+
+      - name: Guard decomposed UI layers from DB/infra coupling
+        run: |
+          PATTERN='DatabaseManager|java\.net\.http\.HttpClient|PdfWriter|XWPF(Document|Paragraph|Run|Table|TableRow|TableCell)|DriverManager'
+          TARGETS='src/main/java/com/example/neuroflowplanner/ui/mainview src/main/java/com/example/neuroflowplanner/ui/smartnotes src/main/java/com/example/neuroflowplanner/ui/MainView.java src/main/java/com/example/neuroflowplanner/ui/SmartNotesDialog.java'
+          if command -v rg >/dev/null 2>&1; then
+            if rg -n "$PATTERN" $TARGETS; then
+              echo "Forbidden infra dependency detected in decomposed UI layers."
+              exit 1
+            fi
+          else
+            if grep -RInE "$PATTERN" $TARGETS; then
+              echo "Forbidden infra dependency detected in decomposed UI layers."
+              exit 1
+            fi
+          fi
+
+      - name: Guard presenters from JavaFX layout construction
+        run: |
+          PATTERN='new\s+(VBox|HBox|BorderPane|StackPane|GridPane|FlowPane|Button|Label|TextField|TextArea|TreeTableView|ListView|TabPane)\b'
+          TARGETS='src/main/java/com/example/neuroflowplanner/ui/mainview/MainViewPresenter.java src/main/java/com/example/neuroflowplanner/ui/smartnotes/SmartNotesPresenter.java'
+          if command -v rg >/dev/null 2>&1; then
+            if rg -n "$PATTERN" $TARGETS; then
+              echo "Presenter classes should not build JavaFX layout/control trees."
+              exit 1
+            fi
+          else
+            if grep -RInE "$PATTERN" $TARGETS; then
+              echo "Presenter classes should not build JavaFX layout/control trees."
+              exit 1
+            fi
+          fi
+
+      - name: Guard UI AI-operations from direct HttpClient usage
+        run: |
+          PATTERN='new\s+HttpClient\b|HttpClient\.newBuilder\s*\(|HttpClient\.newHttpClient\s*\('
+          TARGET='src/main/java/com/example/neuroflowplanner/ui'
+          if command -v rg >/dev/null 2>&1; then
+            if rg -n "$PATTERN" "$TARGET"; then
+              echo "UI layer must not issue direct HttpClient calls for AI operations."
+              exit 1
+            fi
+          else
+            if grep -RInE "$PATTERN" "$TARGET"; then
+              echo "UI layer must not issue direct HttpClient calls for AI operations."
+              exit 1
+            fi
+          fi
+
+      - name: Guard legacy/manual JSON parsing in AI layers
+        run: |
+          TARGET_AI='src/main/java/com/example/neuroflowplanner/ai'
+          TARGET_SERVICE='src/main/java/com/example/neuroflowplanner/service'
+          TARGET_UI='src/main/java/com/example/neuroflowplanner/ui'
+          LEGACY_HELPERS_RG='AiApiUtils\.(extractJsonField|parseJsonMap|extractContent|cleanJson)\s*\('
+          MANUAL_JSON_INDEX_RG='indexOf\(\s*"\\\"'
+          LEGACY_HELPERS_GREP='AiApiUtils\.(extractJsonField|parseJsonMap|extractContent|cleanJson)[[:space:]]*\('
+          MANUAL_JSON_INDEX_GREP='indexOf\([[:space:]]*"\\\"'
+          if command -v rg >/dev/null 2>&1; then
+            if rg -n "$LEGACY_HELPERS_RG" "$TARGET_AI" "$TARGET_SERVICE" "$TARGET_UI"; then
+              echo "Forbidden legacy AiApiUtils JSON helper usage detected."
+              exit 1
+            fi
+            if rg -n "$MANUAL_JSON_INDEX_RG" "$TARGET_AI" "$TARGET_SERVICE" "$TARGET_UI"; then
+              echo "Potential manual JSON parsing via indexOf(\\\"...) detected."
+              exit 1
+            fi
+          else
+            if grep -RInE "$LEGACY_HELPERS_GREP" "$TARGET_AI" "$TARGET_SERVICE" "$TARGET_UI"; then
+              echo "Forbidden legacy AiApiUtils JSON helper usage detected."
+              exit 1
+            fi
+            if grep -RInE "$MANUAL_JSON_INDEX_GREP" "$TARGET_AI" "$TARGET_SERVICE" "$TARGET_UI"; then
+              echo "Potential manual JSON parsing via indexOf(\\\"...) detected."
+              exit 1
+            fi
+          fi
+
+      - name: Guard legacy CSV dependency parsing
+        run: |
+          TARGET='src/main/java'
+          RG_PATTERN='getDependsOn\s*\(\s*\)\s*\.split\s*\(\s*"\s*,\s*"\s*\)|depends[_A-Za-z0-9]*\s*\.split\s*\(\s*"\s*,\s*"\s*\)'
+          GREP_PATTERN='getDependsOn[[:space:]]*\([[:space:]]*\)[[:space:]]*\.split[[:space:]]*\([[:space:]]*"[[:space:]]*,[[:space:]]*"[[:space:]]*\)|depends[_A-Za-z0-9]*[[:space:]]*\.split[[:space:]]*\([[:space:]]*"[[:space:]]*,[[:space:]]*"[[:space:]]*\)'
+          if command -v rg >/dev/null 2>&1; then
+            if rg -n --glob '*.java' "$RG_PATTERN" "$TARGET"; then
+              echo "Forbidden task dependency CSV parsing via split(',') detected in production code."
+              exit 1
+            fi
+          else
+            if grep -RInE --include='*.java' "$GREP_PATTERN" "$TARGET"; then
+              echo "Forbidden task dependency CSV parsing via split(',') detected in production code."
+              exit 1
+            fi
+          fi
+
+      - name: Guard hardcoded production data paths in test code
+        run: |
+          PATTERN='^(?![[:space:]]*(//|/\*|\*|\*/)).*(neuroflow_data/neuroflow\.db|neuroflow_data/notes)'
+          if command -v rg >/dev/null 2>&1; then
+            if rg -n --glob '*.java' --pcre2 "$PATTERN" src/test/java; then
+              echo "Forbidden hardcoded production data path detected in executable test code."
+              exit 1
+            fi
+          else
+            if grep -RInE --include='*.java' 'neuroflow_data/neuroflow\.db|neuroflow_data/notes' src/test/java; then
+              echo "Forbidden hardcoded production data path detected in tests."
+              exit 1
+            fi
+          fi
+
+      - name: Flyway Migrate
+        run: >
+          ./mvnw -B -ntp flyway:migrate
+          -Dflyway.url=jdbc:sqlite:${{ github.workspace }}/target/ci-flyway.db
+          -Dflyway.locations=classpath:db/migration
+          -Dflyway.baselineOnMigrate=true
+          -Dflyway.baselineVersion=1
+
+      - name: Flyway Validate
+        run: >
+          ./mvnw -B -ntp flyway:validate
+          -Dflyway.url=jdbc:sqlite:${{ github.workspace }}/target/ci-flyway.db
+          -Dflyway.locations=classpath:db/migration
+          -Dflyway.baselineOnMigrate=true
+          -Dflyway.baselineVersion=1
+
+      - name: Prepare isolated test data directory
+        run: |
+          rm -rf target/test-data
+          mkdir -p target/test-data
+
+      - name: Fail-fast shortcut conflict guard
+        run: >
+          ./mvnw -B -ntp test
+          -Dtest='ShortcutConflictGuardTest'
+          -Dtest.data.dir=${{ github.workspace }}/target/test-data/ci
+
+      - name: Fail-fast sidebar navigation contract guard
+        run: >
+          ./mvnw -B -ntp test
+          -Dtest='SidebarNavigationArchitectureTest'
+          -Dtest.data.dir=${{ github.workspace }}/target/test-data/ci
+
+      - name: Fail-fast adaptive layout contract guard
+        run: >
+          ./mvnw -B -ntp test
+          -Dtest='AdaptiveLayoutArchitectureTest'
+          -Dtest.data.dir=${{ github.workspace }}/target/test-data/ci
+
+      - name: Fail-fast UI single-path contract guard
+        run: >
+          ./mvnw -B -ntp test
+          -Dtest='UiSinglePathArchitectureTest'
+          -Dtest.data.dir=${{ github.workspace }}/target/test-data/ci
+
+      - name: Run architecture guard checks
+        run: >
+          ./mvnw -B -ntp test
+          -Dtest='BulkWriteArchitectureTest,TaskDependencyArchitectureTest,AiJsonArchitectureTest,UiLayerArchitectureTest,UxActionExecutionArchitectureTest,SidebarNavigationArchitectureTest,AdaptiveLayoutArchitectureTest,UiSinglePathArchitectureTest'
+          -Dtest.data.dir=${{ github.workspace }}/target/test-data/ci
+
+      - name: Run sidebar navigation suite
+        run: >
+          ./mvnw -B -ntp test
+          -Dtest='SidebarNavigationServiceTest,SidebarNavStateTest,SidebarNavigationPersistenceTest,SidebarNavigationMainViewIntegrationTest,CommandPaletteControllerTest,ShortcutRegistryTest'
+          -Dtest.data.dir=${{ github.workspace }}/target/test-data/ci
+
+      - name: Run adaptive UX suite
+        run: >
+          ./mvnw -B -ntp test
+          -Dtest='UiLayoutBreakpointTest,UiLayoutModeTest,UiLayoutStateTest,AdaptiveLayoutServiceTest,MainLayoutCoordinatorTest,UxRolloutConfigMigrationTest,AdaptiveCenterLayoutIntegrationTest,AdaptiveRightPanelLayoutIntegrationTest,AdaptiveUxContractIntegrationTest,SmartNotesAdaptiveLayoutIntegrationTest,AdaptiveLayoutArchitectureTest,UiSinglePathArchitectureTest'
+          -Dtest.data.dir=${{ github.workspace }}/target/test-data/ci
+
+      - name: Run UX suite tests
+        run: >
+          ./mvnw -B -ntp test
+          -Dtest='UndoRedoManagerTest,UiActionRegistryTest,ShortcutRegistryTest,ShortcutDispatchTest,CommandPaletteControllerTest,OverlayDialogManagerTest,CommandPaletteContractIntegrationTest,DefaultGlobalSearchServiceTest,MainViewPresenterTest,MainViewPresenterIntegrationTest,SmartNotesPresenterTest,SmartNotesPresenterIntegrationTest,ShortcutConflictGuardTest,UxActionExecutionArchitectureTest'
+          -Dtest.data.dir=${{ github.workspace }}/target/test-data/ci
+
+      - name: Run bulk transaction and UI regression tests
+        run: >
+          ./mvnw -B -ntp test
+          -Dtest='DatabaseManagerTest,TaskServicesIntegrationTest,MainViewPresenterTest,MainViewDependencyUiSmokeTest,TaskImportServiceTest'
+          -Dtest.data.dir=${{ github.workspace }}/target/test-data/ci
+
+      - name: Run Unit/Integration/Architecture Tests
+        run: >
+          ./mvnw -B -ntp test
+          -Dtest='*Test,ExternalOpenAiClientResilienceIT'
+          -Dtest.data.dir=${{ github.workspace }}/target/test-data/ci
+
+  backend-regression:
+    name: backend-regression
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Sync backend dependencies
+        run: uv sync --frozen --group dev
+
+      - name: Run backend regression suite
+        run: uv run pytest tests
+
+  nav-surfaces-ux-suite:
+    name: nav-surfaces-ux-suite
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: maven
+
+      - name: Ensure Maven Wrapper is executable
+        run: chmod +x ./mvnw
+
+      - name: Prepare isolated test data directory
+        run: |
+          rm -rf target/test-data
+          mkdir -p target/test-data
+
+      - name: Run nav-surfaces UX architecture guards
+        run: >
+          ./mvnw -B -ntp test
+          -Dtest='SidebarNavigationArchitectureTest,LeftNavSurfaceArchitectureGuardTest,RightPanelLayoutArchitectureGuardTest,AdaptiveLayoutArchitectureTest,UiSinglePathArchitectureTest'
+          -Dtest.data.dir=${{ github.workspace }}/target/test-data/nav-surfaces-ux
+
+      - name: Run nav-surfaces UX suite
+        run: >
+          ./mvnw -B -ntp test
+          -Dtest='UiNavigationSurfacePolicyServiceTest,SidebarNavigationServiceTest,SidebarNavigationMainViewIntegrationTest,SidebarWindowActionsIntegrationTest,CommandPaletteControllerTest,CommandPaletteContractIntegrationTest,MainLayoutCoordinatorTest,AdaptiveUxContractIntegrationTest,AdaptiveRightPanelLayoutIntegrationTest'
+          -Dtest.data.dir=${{ github.workspace }}/target/test-data/nav-surfaces-ux
+
+  two-tier-sidebar-ux-suite:
+    name: two-tier-sidebar-ux-suite
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: maven
+
+      - name: Ensure Maven Wrapper is executable
+        run: chmod +x ./mvnw
+
+      - name: Prepare isolated test data directory
+        run: |
+          rm -rf target/test-data
+          mkdir -p target/test-data
+
+      - name: Run two-tier sidebar UX architecture guards
+        run: >
+          ./mvnw -B -ntp test
+          -Dtest='SidebarNavigationArchitectureTest,LeftNavSurfaceArchitectureGuardTest,AdaptiveLayoutArchitectureTest,UiSinglePathArchitectureTest'
+          -Dtest.data.dir=${{ github.workspace }}/target/test-data/two-tier-sidebar-ux
+
+      - name: Run two-tier sidebar UX suite
+        run: >
+          ./mvnw -B -ntp test
+          -Dtest='TwoTierSidebarPolicyServiceTest,UiNavigationSurfacePolicyServiceTest,SidebarNavigationServiceTest,MainLayoutCoordinatorTest,SidebarNavigationMainViewIntegrationTest,AdaptiveUxContractIntegrationTest,CommandPaletteControllerTest,CommandPaletteContractIntegrationTest'
+          -Dtest.data.dir=${{ github.workspace }}/target/test-data/two-tier-sidebar-ux

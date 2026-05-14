@@ -1,34 +1,22 @@
 package com.example.neuroflowplanner.service;
 
+import com.example.neuroflowplanner.ai.AiClient;
+import com.example.neuroflowplanner.ai.AiClientFactory;
+import com.example.neuroflowplanner.ai.AiMode;
+import com.example.neuroflowplanner.ai.AiRequestOptions;
+import com.example.neuroflowplanner.ai.AiResponse;
 import com.example.neuroflowplanner.model.Task;
-import com.example.neuroflowplanner.util.ConfigManager;
-import java.net.URI;
-import java.net.http.*;
 import java.time.LocalDate;
 import java.time.temporal.ChronoUnit;
 import java.util.concurrent.CompletableFuture;
 
 public class AISchedulingEngine {
 
-    private final String API_URL;
-    private final String MODEL;
-    private final String API_KEY;
     private static final double URGENCY_WEIGHT = 0.6;
     private static final double COMPLEXITY_WEIGHT = 0.4;
-    
-    private final HttpClient client = HttpClient.newHttpClient();
-
-    private static final String DEFAULT_API_URL = "http://localhost:11434/api/chat";
-    private static final String DEFAULT_MODEL = "llama3";
 
     public AISchedulingEngine() {
-        // Load from external config via ConfigManager with fallback defaults
-        String url = ConfigManager.getProperty("api.url");
-        String model = ConfigManager.getProperty("api.model");
-        String key = ConfigManager.getProperty("api.key");
-        API_URL = url != null ? url : DEFAULT_API_URL;
-        MODEL = model != null ? model : DEFAULT_MODEL;
-        API_KEY = key; // может быть null для локального сервера
+        // AiClientFactory is used directly, no initialization needed
     }
 
     public void calculatePriority(Task task) {
@@ -194,34 +182,22 @@ public class AISchedulingEngine {
                 """;
         }
         
-        String json = """
-            {
-                "model": "%s",
-                "messages": [
-                    {"role": "system", "content": "%s"},
-                    {"role": "user", "content": "%s"}
-                ],
-                "stream": false
-            }
-            """.formatted(MODEL, escapeJson(systemPrompt), escapeJson(prompt));
+        AiClient aiClient = AiClientFactory.getInstance().getActiveClient();
         
-        HttpRequest.Builder requestBuilder = HttpRequest.newBuilder()
-            .uri(URI.create(API_URL))
-            .header("Content-Type", "application/json; charset=utf-8");
-        
-        // Добавляем API-ключ если он указан (для удалённых серверов)
-        if (API_KEY != null && !API_KEY.isEmpty()) {
-            requestBuilder.header("Authorization", "Bearer " + API_KEY);
+        // В офлайн-режиме возвращаем fallback
+        if (aiClient.getMode() == AiMode.OFFLINE) {
+            return CompletableFuture.completedFuture(generateFallbackInsight(task));
         }
         
-        HttpRequest request = requestBuilder
-            .POST(HttpRequest.BodyPublishers.ofString(json, java.nio.charset.StandardCharsets.UTF_8))
+        AiRequestOptions options = AiRequestOptions.builder()
+            .model(aiClient.getDefaultModel())
+            .systemPrompt(systemPrompt)
             .build();
         
-        return client.sendAsync(request, HttpResponse.BodyHandlers.ofString(java.nio.charset.StandardCharsets.UTF_8))
+        return aiClient.sendChatMessage(prompt, options)
             .thenApply(response -> {
-                if (response.statusCode() == 200) {
-                    return extractContent(response.body());
+                if (response.success() && response.content() != null) {
+                    return decodeUnicodeEscapes(response.content());
                 }
                 return generateFallbackInsight(task);
             })
@@ -280,20 +256,6 @@ public class AISchedulingEngine {
         
         return sb.toString();
     }
-
-    private String extractContent(String json) {
-        int idx = json.indexOf("\"content\":");
-        if (idx == -1) return "Ошибка парсинга";
-        int start = json.indexOf("\"", idx + 10) + 1;
-        int end = start;
-        while (end < json.length()) {
-            if (json.charAt(end) == '"' && json.charAt(end - 1) != '\\') break;
-            end++;
-        }
-        String content = json.substring(start, end);
-        content = decodeUnicodeEscapes(content);
-        return content.replace("\\n", "\n").replace("\\\"", "\"");
-    }
     
     private String decodeUnicodeEscapes(String text) {
         StringBuilder result = new StringBuilder();
@@ -331,9 +293,5 @@ public class AISchedulingEngine {
             }
         }
         return result.toString();
-    }
-
-    private String escapeJson(String text) {
-        return text.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n");
     }
 }

@@ -1,0 +1,5 @@
+{
+  "requestId": "req_1234567890",
+  "status": "completed",
+  "resultUrl": "https://cdn.example.test/images/result-ready.png"
+}
