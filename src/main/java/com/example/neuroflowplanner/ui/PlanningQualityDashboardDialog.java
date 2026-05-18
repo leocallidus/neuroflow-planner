@@ -231,7 +231,7 @@ public class PlanningQualityDashboardDialog implements InlineView {
         PlanningQualitySnapshot snapshot = safeResult.snapshot();
 
         updatedLabel.setText(formatUpdatedLabel(safeResult.generatedAt(), safeResult.fromCache()));
-        statusLabel.setText(safeResult.aiUsed() ? "AI-сводка актуальна" : "Показан локальный quality dashboard");
+        statusLabel.setText(safeResult.aiUsed() ? "AI-сводка актуальна" : "Показан локальный дашборд качества");
 
         if (isEffectivelyEmpty(snapshot)) {
             showOnly(emptyState);
@@ -260,12 +260,12 @@ public class PlanningQualityDashboardDialog implements InlineView {
         title.getStyleClass().add("planning-quality-summary-title");
         Region spacer = new Region();
         HBox.setHgrow(spacer, Priority.ALWAYS);
-        Label sourceChip = new Label(result.aiUsed() ? "AI" : "Fallback");
+        Label sourceChip = new Label(result.aiUsed() ? "AI" : "Базовый");
         sourceChip.getStyleClass().addAll("planning-quality-chip", result.aiUsed() ? "planning-quality-chip-ai" : "planning-quality-chip-fallback");
         header.getChildren().addAll(title, spacer, sourceChip);
 
         Label summaryLabel = new Label(summary.summary().isBlank()
-                ? "Quality dashboard собран, но выраженного доминирующего паттерна пока нет."
+                ? "Дашборд качества собран, но выраженного доминирующего паттерна пока нет."
                 : summary.summary());
         summaryLabel.getStyleClass().add("planning-quality-body-text");
         summaryLabel.setWrapText(true);
@@ -320,7 +320,7 @@ public class PlanningQualityDashboardDialog implements InlineView {
                 createMetricDetail("Средняя ошибка", formatPercent(metric.averageErrorRatio())),
                 createMetricDetail("Недооценка", formatPercent(metric.underestimationBias())),
                 createMetricDetail("Переоценка", formatPercent(metric.overestimationBias())),
-                createMetricDetail("Coverage", metric.comparableTaskCount() + " из " + metric.estimatedTaskCount() + " задач"),
+                createMetricDetail("Охват", metric.comparableTaskCount() + " из " + metric.estimatedTaskCount() + " задач"),
                 createMetricApproximation(metric.approximate())
         );
         return card;
@@ -336,9 +336,9 @@ public class PlanningQualityDashboardDialog implements InlineView {
         card.getChildren().addAll(
                 createMetricPrimaryValue(formatPercent(metric.rescheduleRate()), "Задач с переносами"),
                 createMetricDetail("Без переносов", String.valueOf(metric.untouchedTaskCount())),
-                createMetricDetail("Multiple", String.valueOf(metric.multipleRescheduleCount())),
-                createMetricDetail("Late", String.valueOf(metric.lateRescheduleCount())),
-                createMetricDetail("Analyzed", String.valueOf(metric.analyzedTaskCount())),
+                createMetricDetail("Множественные", String.valueOf(metric.multipleRescheduleCount())),
+                createMetricDetail("Поздние", String.valueOf(metric.lateRescheduleCount())),
+                createMetricDetail("Проанализировано", String.valueOf(metric.analyzedTaskCount())),
                 createMetricApproximation(metric.approximate())
         );
         return card;
@@ -352,8 +352,8 @@ public class PlanningQualityDashboardDialog implements InlineView {
         }
 
         card.getChildren().addAll(
-                createMetricPrimaryValue(localizeRhythmBand(metric.band()), "Общий band"),
-                createMetricDetail("Score", formatPercent(metric.score())),
+                createMetricPrimaryValue(localizeRhythmBand(metric.band()), "Общий уровень"),
+                createMetricDetail("Оценка", formatPercent(metric.score())),
                 createMetricDetail("Продуктивных дней", metric.productiveDayCount() + " из " + metric.analyzedDayCount()),
                 createMetricDetail("Разброс старта", metric.startTimeVariabilityMinutes() + " мин"),
                 createMetricDetail("Разброс фокуса", formatPercent(metric.focusMinutesVariability())),

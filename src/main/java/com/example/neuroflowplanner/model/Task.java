@@ -170,4 +170,9 @@ public class Task {
     public ObservableList<Task> getSubtasks() { return subtasks; }
     public boolean hasSubtasks() { return !subtasks.isEmpty(); }
     public boolean isSubtask() { return parentId.get() != null; }
+
+    @Override
+    public String toString() {
+        return getTitle() != null ? getTitle() : "";
+    }
 }
